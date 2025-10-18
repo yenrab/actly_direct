@@ -71,6 +71,19 @@
     .equ PROCESS_STATE_SUSPENDED, 4    // Process suspended
     .equ PROCESS_STATE_TERMINATED, 5   // Process terminated
 
+    // Blocking reason constants
+    .equ REASON_NONE, 0                // No blocking reason
+    .equ REASON_RECEIVE, 1             // Blocking on message receive
+    .equ REASON_TIMER, 2               // Blocking on timer timeout
+    .equ REASON_IO, 3                  // Blocking on I/O operation
+
+    // Yielding and blocking constants
+    .equ YIELD_CHECK_INTERVAL, 1       // Check reductions every N operations
+    .equ BIF_SPAWN_COST, 10            // Reductions cost for spawn
+    .equ BIF_EXIT_COST, 1              // Reductions cost for exit
+    .equ BIF_YIELD_COST, 1             // Reductions cost for yield
+    .equ MAX_BLOCKING_TIME, 1000000    // Maximum blocking time in ticks
+
     // Memory alignment constants
     .equ CACHE_LINE_SIZE, 128          // Apple Silicon cache line size
     .equ PAGE_SIZE, 4096               // Standard page size

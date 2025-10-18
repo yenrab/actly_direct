@@ -119,9 +119,9 @@ void test_scheduler_data_structure_layout(void) {
     test_assert_equal(24, PRIORITY_QUEUE_SIZE_CONST, "scheduler_priority_queue_size");
     
     // Test that scheduler_size is correct
-    // Should be: core_id + queues + current_process + reduction_count + 3 statistics
-    // = 1 + (4 * 3) + 1 + 1 + 3 = 18 quad words = 144 bytes
-    test_assert_equal(144, SCHEDULER_SIZE_CONST, "scheduler_scheduler_size");
+    // Should be: core_id + queues + current_process + reduction_count + 3 statistics + waiting queues + yield statistics
+    // = 1 + (4 * 3) + 1 + 1 + 3 + (3 * 3) + 2 = 30 quad words = 240 bytes
+    test_assert_equal(240, SCHEDULER_SIZE_CONST, "scheduler_scheduler_size");
     
     // Test that NUM_PRIORITIES is 4
     test_assert_equal(4, NUM_PRIORITIES_CONST, "scheduler_num_priorities");

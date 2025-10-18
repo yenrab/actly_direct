@@ -49,6 +49,23 @@ extern void test_process_control_block(void);
 extern void test_scheduler_queue_length(void);
 extern void test_expand_memory_pool(void);
 
+// External Phase 6 test functions (now working!)
+extern void test_yielding_main(void);
+extern void test_blocking_main(void);
+extern void test_actly_bifs_main(void);
+extern void test_integration_yielding_main(void);
+
+// External Phase 6 individual test functions
+extern void test_process_yield_basic(void);
+extern void test_process_yield_with_pcb(void);
+extern void test_scheduler_enqueue_basic(void);
+extern void test_scheduler_enqueue_edge_cases(void);
+extern void test_process_save_context_basic(void);
+extern void test_process_restore_context_basic(void);
+extern void test_context_functions_edge_cases(void);
+extern void test_integration_yield_scheduling(void);
+extern void test_integration_multiple_processes(void);
+
 // External test framework functions
 extern void test_init(void);
 extern void test_print_results(void);
@@ -83,6 +100,25 @@ int test_runner_main(void) {
     test_process_state_management();
     test_scheduler_queue_length();
     test_expand_memory_pool();
+    
+    // Run new Phase 6 yielding and blocking tests
+    // NOTE: These tests have been fixed and are now working!
+    // The illegal instruction errors have been resolved.
+    test_yielding_main();
+    test_blocking_main();
+    test_actly_bifs_main();
+    test_integration_yielding_main();
+    
+    // Run new Phase 6 individual test suites
+    test_process_yield_basic();
+    test_process_yield_with_pcb();
+    test_scheduler_enqueue_basic();
+    test_scheduler_enqueue_edge_cases();
+    test_process_save_context_basic();
+    test_process_restore_context_basic();
+    test_context_functions_edge_cases();
+    test_integration_yield_scheduling();
+    test_integration_multiple_processes();
     
     // Print test results
     test_print_results();

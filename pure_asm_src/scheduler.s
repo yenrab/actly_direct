@@ -172,7 +172,7 @@ _PRIORITY_QUEUE_SIZE:
     .quad queue_size
 
 _SCHEDULER_SIZE:
-    .quad 144  // Updated scheduler size
+    .quad 240  // Updated scheduler size with waiting queues
 
 // Non-underscore versions for C compatibility (as data symbols)
 _MAX_CORES_CONST:
@@ -185,7 +185,7 @@ _PRIORITY_QUEUE_SIZE_CONST:
     .quad 24   // queue_size value
 
 _SCHEDULER_SIZE_CONST:
-    .quad 144  // Updated scheduler size
+    .quad 240  // Updated scheduler size with waiting queues
 
 // Compatibility aliases for test functions
 _scheduler_get_queue_length_compat:
@@ -222,8 +222,13 @@ _scheduler_get_queue_length_compat:
     .equ scheduler_total_yields, 128     // Total voluntary yields (8 bytes)
     .equ scheduler_total_migrations, 136 // Total process migrations (8 bytes)
     .equ scheduler_idle_count, 144       // Idle loop count (8 bytes)
-    .equ scheduler_padding, 144          // No padding needed
-    .equ scheduler_size, 144             // Total scheduler state size
+    .equ scheduler_waiting_receive, 152  // Receive waiting queue (24 bytes)
+    .equ scheduler_waiting_timer, 176    // Timer waiting queue (24 bytes)
+    .equ scheduler_waiting_io, 200       // I/O waiting queue (24 bytes)
+    .equ scheduler_total_blocks, 224     // Total blocks (8 bytes)
+    .equ scheduler_total_wakes, 232      // Total wakes (8 bytes)
+    .equ scheduler_padding, 240          // No padding needed
+    .equ scheduler_size, 240             // Total scheduler state size
 
 // ------------------------------------------------------------
 // Global Scheduler Data
@@ -324,6 +329,27 @@ init_queue_loop:
     str xzr, [x20, #scheduler_total_yields]
     str xzr, [x20, #scheduler_total_migrations]
     str xzr, [x20, #scheduler_idle_count]
+    str xzr, [x20, #scheduler_total_blocks]
+    str xzr, [x20, #scheduler_total_wakes]
+
+    // Initialize waiting queues
+    // Receive waiting queue
+    add x23, x20, #scheduler_waiting_receive
+    str xzr, [x23, #queue_head]
+    str xzr, [x23, #queue_tail]
+    str wzr, [x23, #queue_count]
+    
+    // Timer waiting queue
+    add x23, x20, #scheduler_waiting_timer
+    str xzr, [x23, #queue_head]
+    str xzr, [x23, #queue_tail]
+    str wzr, [x23, #queue_count]
+    
+    // I/O waiting queue
+    add x23, x20, #scheduler_waiting_io
+    str xzr, [x23, #queue_head]
+    str xzr, [x23, #queue_tail]
+    str wzr, [x23, #queue_count]
 
     // Core ID is now passed as parameter, no need to store globally
 
