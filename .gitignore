@@ -1,0 +1,54 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.out
+*.bin
+
+# Test executables
+test_*_standalone
+test_*_exe
+scheduler_tests
+pcb_tests
+scheduler_only_tests
+test_process_integration
+
+# Build directories
+lib/bin/
+build/
+dist/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Coverage reports
+coverage/
+*.gcov
+*.gcno
+*.gcda
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb

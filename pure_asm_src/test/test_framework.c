@@ -1,0 +1,231 @@
+// MIT License
+//
+// Copyright (c) 2025 Lee Barney
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// ------------------------------------------------------------
+// test_framework.c — C test framework for pure assembly scheduler
+// ------------------------------------------------------------
+// This provides a C-based test framework to test the pure assembly scheduler
+// Uses standard C library for convenience in testing
+
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdbool.h>
+
+// External assembly functions
+extern void scheduler_init(uint64_t core_id);
+extern void* scheduler_get_current_process(uint64_t core_id);
+extern void scheduler_set_current_process(uint64_t core_id, void* process);
+extern uint64_t scheduler_get_reduction_count(uint64_t core_id);
+extern void scheduler_set_reduction_count(uint64_t core_id, uint64_t count);
+extern uint64_t scheduler_get_core_id(void);
+extern void* get_scheduler_state(uint64_t core_id);
+extern void* get_priority_queue(void* state, uint64_t priority);
+
+// External constants from assembly
+extern const uint64_t MAX_CORES_CONST;
+extern const uint64_t NUM_PRIORITIES_CONST;
+extern const uint64_t DEFAULT_REDUCTIONS;
+extern const uint64_t PRIORITY_QUEUE_SIZE_CONST;
+extern const uint64_t SCHEDULER_SIZE_CONST;
+
+// Forward declarations
+void test_pass(const char* test_name);
+void test_fail(uint64_t expected, uint64_t actual, const char* test_name);
+
+// Test framework constants
+#define MAX_TESTS 200
+#define TEST_NAME_LENGTH 64
+
+// Test result structure
+typedef struct {
+    char name[TEST_NAME_LENGTH];
+    bool passed;
+    uint64_t expected;
+    uint64_t actual;
+} test_result_t;
+
+// Test framework state
+static test_result_t test_results[MAX_TESTS];
+static uint64_t test_count = 0;
+static uint64_t test_passed_count = 0;
+uint64_t test_failed_count = 0;  // Global for test_runner access
+static uint64_t current_test_index = 0;
+
+// ------------------------------------------------------------
+// test_init — Initialize test framework
+// ------------------------------------------------------------
+void test_init(void) {
+    test_count = 0;
+    test_passed_count = 0;
+    test_failed_count = 0;
+    current_test_index = 0;
+}
+
+// ------------------------------------------------------------
+// test_assert_equal — Assert two values are equal
+// ------------------------------------------------------------
+void test_assert_equal(uint64_t expected, uint64_t actual, const char* test_name) {
+    if (expected == actual) {
+        test_pass(test_name);
+    } else {
+        test_fail(expected, actual, test_name);
+    }
+}
+
+// ------------------------------------------------------------
+// test_assert_not_equal — Assert two values are not equal
+// ------------------------------------------------------------
+void test_assert_not_equal(uint64_t value1, uint64_t value2, const char* test_name) {
+    if (value1 != value2) {
+        test_pass(test_name);
+    } else {
+        test_fail(value1, value2, test_name);
+    }
+}
+
+// ------------------------------------------------------------
+// test_assert_zero — Assert value is zero
+// ------------------------------------------------------------
+void test_assert_zero(uint64_t value, const char* test_name) {
+    if (value == 0) {
+        test_pass(test_name);
+    } else {
+        test_fail(0, value, test_name);
+    }
+}
+
+// ------------------------------------------------------------
+// test_assert_not_zero — Assert value is not zero
+// ------------------------------------------------------------
+void test_assert_not_zero(uint64_t value, const char* test_name) {
+    if (value != 0) {
+        test_pass(test_name);
+    } else {
+        test_fail(1, value, test_name);
+    }
+}
+
+// ------------------------------------------------------------
+// test_assert_true — Assert value is non-zero (true)
+// ------------------------------------------------------------
+void test_assert_true(uint64_t value, const char* test_name) {
+    test_assert_not_zero(value, test_name);
+}
+
+// ------------------------------------------------------------
+// test_assert_false — Assert value is zero (false)
+// ------------------------------------------------------------
+void test_assert_false(uint64_t value, const char* test_name) {
+    test_assert_zero(value, test_name);
+}
+
+// ------------------------------------------------------------
+// test_assert_not_null — Assert pointer is not NULL
+// ------------------------------------------------------------
+void test_assert_not_null(void* ptr, const char* test_name) {
+    if (ptr != NULL) {
+        test_passed_count++;
+        printf("  ✓ %s\n", test_name);
+    } else {
+        test_failed_count++;
+        printf("  ✗ %s: Expected non-NULL pointer, got NULL\n", test_name);
+    }
+}
+
+// ------------------------------------------------------------
+// test_assert_null — Assert pointer is NULL
+// ------------------------------------------------------------
+void test_assert_null(void* ptr, const char* test_name) {
+    if (ptr == NULL) {
+        test_passed_count++;
+        printf("  ✓ %s\n", test_name);
+    } else {
+        test_failed_count++;
+        printf("  ✗ %s: Expected NULL pointer, got %p\n", test_name, ptr);
+    }
+}
+
+// ------------------------------------------------------------
+// test_pass — Record a passing test
+// ------------------------------------------------------------
+void test_pass(const char* test_name) {
+    if (current_test_index >= MAX_TESTS) {
+        return;
+    }
+    
+    test_result_t* result = &test_results[current_test_index];
+    strncpy(result->name, test_name, TEST_NAME_LENGTH - 1);
+    result->name[TEST_NAME_LENGTH - 1] = '\0';
+    result->passed = true;
+    result->expected = 0;
+    result->actual = 0;
+    
+    current_test_index++;
+    test_passed_count++;
+    test_count++;
+}
+
+// ------------------------------------------------------------
+// test_fail — Record a failing test
+// ------------------------------------------------------------
+void test_fail(uint64_t expected, uint64_t actual, const char* test_name) {
+    if (current_test_index >= MAX_TESTS) {
+        return;
+    }
+    
+    test_result_t* result = &test_results[current_test_index];
+    strncpy(result->name, test_name, TEST_NAME_LENGTH - 1);
+    result->name[TEST_NAME_LENGTH - 1] = '\0';
+    result->passed = false;
+    result->expected = expected;
+    result->actual = actual;
+    
+    current_test_index++;
+    test_failed_count++;
+    test_count++;
+}
+
+// ------------------------------------------------------------
+// test_print_results — Print test results summary
+// ------------------------------------------------------------
+void test_print_results(void) {
+    printf("\n=== Test Results ===\n");
+    printf("Total Assertions: %llu\n", test_passed_count + test_failed_count);
+    printf("Assertions Passed: %llu\n", test_passed_count);
+    printf("Assertions Failed: %llu\n", test_failed_count);
+    printf("Success Rate: %.1f%%\n", test_failed_count == 0 ? 100.0 : (double)test_passed_count / (test_passed_count + test_failed_count) * 100.0);
+    printf("========================\n");
+    
+    // Print failed test details
+    if (test_failed_count > 0) {
+        printf("\nFailed Tests:\n");
+        for (uint64_t i = 0; i < current_test_index; i++) {
+            if (!test_results[i].passed) {
+                printf("  - %s (expected: %llu, actual: %llu)\n", 
+                       test_results[i].name, 
+                       test_results[i].expected, 
+                       test_results[i].actual);
+            }
+        }
+    }
+}

@@ -1,0 +1,308 @@
+# Code Documentation and Licensing Guide
+
+This document provides instructions for adding MIT licenses and comprehensive documentation to source files in the pure_asm_src codebase.
+
+## MIT License Addition
+
+### License Header Format
+Add the following MIT license header to the beginning of all source files (.s, .c, .sh, .h):
+
+```
+// MIT License
+//
+// Copyright (c) 2025 Lee Barney
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+```
+
+### File Types to License
+- **Assembly files (.s)**: Use `//` comment style
+- **C source files (.c)**: Use `//` comment style  
+- **Shell scripts (.sh)**: Use `#` comment style
+- **Header files (.h)**: Use `//` comment style
+
+### Placement
+- Place license header at the very beginning of the file
+- Before any existing file documentation or includes
+- Maintain proper comment syntax for each file type
+
+## File Documentation Standards
+
+### Assembly Files (.s) Documentation
+
+#### File Header Structure
+```
+// ------------------------------------------------------------
+// filename.s — Brief description
+// ------------------------------------------------------------
+// Detailed description of the file's purpose and functionality.
+// Explain what the file provides, its role in the system, and
+// key operations it performs.
+//
+// The file provides:
+//   - Feature 1
+//   - Feature 2
+//   - Feature 3
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: YYYY-MM-DD
+//
+```
+
+#### Export Section Documentation
+```
+// ------------------------------------------------------------
+// Section Name
+// ------------------------------------------------------------
+// Description of what this section exports or provides.
+// Explain the purpose and usage of the exported items.
+//
+// WARNING: These exports are intended ONLY for unit testing and other
+// testing purposes. There is NO guarantee they will exist over various
+// versions, nor any intention to make them stable or backwards compatible
+// over versions. Do not use these exports in production code.
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: YYYY-MM-DD
+//
+```
+
+#### Function Documentation Template
+```
+// ------------------------------------------------------------
+// function_name — Brief function description
+// ------------------------------------------------------------
+// Detailed description of what the function does and its purpose.
+// Explain the function's role, operations performed, and context
+// within the larger system.
+//
+// The function performs the following operations:
+//   - Operation 1
+//   - Operation 2
+//   - Operation 3
+//
+// Parameters:
+//   x0 (type) - param_name: Description of parameter
+//   x1 (type) - param_name: Description of parameter
+//
+// Returns:
+//   x0 (type) - return_description: Description of return value
+//
+// Complexity: O(n) - Time/space complexity analysis
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: YYYY-MM-DD
+//
+// Clobbers: x0, x1, x2, x3, x4, x5, x6, x7, x8
+```
+
+#### Data Section Documentation
+```
+// ------------------------------------------------------------
+// Section Name
+// ------------------------------------------------------------
+// Description of the data section's purpose and contents.
+// Explain what data is stored and how it's used.
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: YYYY-MM-DD
+//
+```
+
+### C Files (.c) Documentation
+
+#### File Header Structure
+```
+// ------------------------------------------------------------
+// filename.c — Brief description
+// ------------------------------------------------------------
+// Detailed description of the C file's purpose and functionality.
+// Explain what the file provides and its role in the system.
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: YYYY-MM-DD
+//
+```
+
+#### Function Documentation Template
+```
+// ------------------------------------------------------------
+// function_name — Brief function description
+// ------------------------------------------------------------
+// Detailed description of what the function does and its purpose.
+// Explain the function's role and operations performed.
+//
+// Parameters:
+//   param1 (type) - Description of parameter
+//   param2 (type) - Description of parameter
+//
+// Returns:
+//   type - Description of return value
+//
+// Complexity: O(n) - Time/space complexity analysis
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: YYYY-MM-DD
+//
+```
+
+### Shell Scripts (.sh) Documentation
+
+#### File Header Structure
+```
+# ------------------------------------------------------------
+# filename.sh — Brief description
+# ------------------------------------------------------------
+# Detailed description of the shell script's purpose and functionality.
+# Explain what the script does and how to use it.
+#
+# Version: 0.10
+# Author: Lee Barney
+# Last Modified: YYYY-MM-DD
+#
+```
+
+## Documentation Standards
+
+### Version Information
+- Use semantic versioning (e.g., 0.10)
+- Update version when making significant changes
+- Keep version consistent across related files
+
+### Author Information
+- Always use "Lee Barney" as the author
+- Maintain consistency across all files
+
+### Last Modified Date
+- Use YYYY-MM-DD format
+- Update when making changes to the file
+- Use current date for new files
+
+### Testing Disclaimers
+- Add testing-only disclaimers to all C-accessible exports
+- Use the standard warning text for production code restrictions
+- Apply to all .global exports in assembly files
+
+### Complexity Analysis
+- Use Big O notation (O(1), O(n), O(log n), etc.)
+- Consider both time and space complexity
+- Be specific about what "n" represents
+
+### Parameter Documentation
+- Include register names for assembly functions (x0, x1, etc.)
+- Specify data types for C functions
+- Provide clear descriptions of each parameter's purpose
+
+### Return Value Documentation
+- Specify return register for assembly functions
+- Include data types for C functions
+- Explain what the return value represents
+
+## File Organization
+
+### Assembly Files Structure
+1. MIT License header
+2. File header documentation
+3. Export section documentation
+4. External declarations documentation
+5. Constants/equates documentation
+6. Function documentation (each function)
+7. Data section documentation
+8. Read-only data section documentation
+
+### C Files Structure
+1. MIT License header
+2. File header documentation
+3. Include statements
+4. External declarations
+5. Function documentation (each function)
+6. Implementation
+
+### Shell Scripts Structure
+1. Shebang line
+2. MIT License header
+3. File header documentation
+4. Variable declarations
+5. Function documentation
+6. Main script logic
+
+## Best Practices
+
+1. **Consistency**: Use the same documentation format across all files
+2. **Completeness**: Document all functions, exports, and major sections
+3. **Clarity**: Write clear, concise descriptions
+4. **Accuracy**: Keep documentation up-to-date with code changes
+5. **Testing Disclaimers**: Always include testing-only warnings for exports
+6. **Version Control**: Update version and date when making changes
+
+## Examples
+
+### Assembly Function Example
+```assembly
+// ------------------------------------------------------------
+// scheduler_init — Initialize scheduler for current core
+// ------------------------------------------------------------
+// Initialize the scheduler data structures for a specific core, setting up
+// priority queues, reduction counters, and core-specific state. This function
+// must be called once per core before any scheduling operations can be performed.
+//
+// Parameters:
+//   x0 (uint64_t) - core_id: The unique identifier for the core (0 to MAX_CORES-1)
+//
+// Returns:
+//   None
+//
+// Complexity: O(1) - Constant time initialization regardless of core count
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+// Clobbers: x1, x2, x3, x4, x5, x6, x7, x8
+```
+
+### C Function Example
+```c
+// ------------------------------------------------------------
+// test_scheduler_init — Test scheduler initialization
+// ------------------------------------------------------------
+// Test the scheduler initialization function to ensure it properly
+// sets up the scheduler state for a given core ID.
+//
+// Parameters:
+//   None
+//
+// Returns:
+//   None
+//
+// Complexity: O(1) - Constant time test execution
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+```
+
+This guide ensures consistent, professional documentation across the entire codebase while maintaining proper licensing and testing disclaimers.

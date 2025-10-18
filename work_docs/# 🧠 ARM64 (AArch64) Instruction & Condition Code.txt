@@ -1,0 +1,177 @@
+# 🧠 ARM64 (AArch64) Instruction & Condition Code Reference
+
+## 📌 Data Processing Instructions
+
+| Instruction | Example                        | Description                                                                                   |
+|------------|---------------------------------|-----------------------------------------------------------------------------------------------|
+| `mov`     | `mov x0, x1`                    | Copy source register or immediate into destination register.                                  |
+| `movz`    | `movz x0, #0x1234`              | Move 16-bit immediate, zeroing the rest.                                                     |
+| `movn`    | `movn x0, #0x0`                 | Move NOT of 16-bit immediate into register.                                                 |
+| `movk`    | `movk x0, #0x5678, lsl #16`     | Insert 16-bit immediate into part of register without clearing other bits.                   |
+| `add`     | `add x0, x1, x2`                | Add two registers or a register and immediate.                                              |
+| `sub`     | `sub x0, x1, x2`                | Subtract x2 from x1.                                                                        |
+| `mul`     | `mul x0, x1, x2`                | Multiply x1 * x2 → x0 (low 64 bits).                                                        |
+| `madd`    | `madd x0, x1, x2, x3`          | x0 = x1*x2 + x3.                                                                            |
+| `and`     | `and x0, x1, x2`                | Bitwise AND.                                                                               |
+| `orr`     | `orr x0, x1, x2`                | Bitwise OR.                                                                                |
+| `eor`     | `eor x0, x1, x2`                | Bitwise XOR.                                                                              |
+| `bic`     | `bic x0, x1, x2`                | Bit clear: x0 = x1 & ~x2.                                                                  |
+| `lsl`     | `lsl x0, x1, #3`                | Logical shift left.                                                                       |
+| `lsr`     | `lsr x0, x1, #2`                | Logical shift right.                                                                      |
+| `asr`     | `asr x0, x1, #1`                | Arithmetic shift right (sign-preserving).                                                 |
+| `cmp`     | `cmp x0, x1`                    | Subtract x1 from x0, set flags. Used for branches.                                       |
+| `tst`     | `tst x0, x1`                    | AND x0 & x1, set flags (bit test).                                                      |
+| `csel`    | `csel x0, x1, x2, eq`          | Conditional select. x0 = x1 if condition true, else x2.                                  |
+
+---
+
+## 📌 Branch & Call Instructions
+
+| Instruction | Example                  | Description                                                                          |
+|------------|---------------------------|--------------------------------------------------------------------------------------|
+| `b`       | `b label`                | Unconditional branch (jump).                                                       |
+| `bl`      | `bl func`                | Branch with link (calls function, saves return addr in x30).                        |
+| `br`      | `br x0`                  | Branch to address in register (indirect).                                          |
+| `blr`     | `blr x0`                 | Branch with link to register (function pointer call).                              |
+| `ret`     | `ret`                    | Return from function (jumps to x30).                                              |
+| `cbz`     | `cbz x0, label`         | Compare and branch if zero.                                                       |
+| `cbnz`    | `cbnz x0, label`        | Compare and branch if not zero.                                                  |
+
+---
+
+## 📌 Load/Store Instructions
+
+| Instruction | Example                          | Description                                                                                   |
+|------------|-----------------------------------|-----------------------------------------------------------------------------------------------|
+| `adr`     | `adr x0, label`                   | Load PC-relative address of label into x0.                                                   |
+| `adrp`    | `adrp x0, label`                  | Load page address of label (used with `add` for full addresses).                             |
+| `ldr`     | `ldr x0, [x1]` / `ldr x0, =label` | Load 64-bit value from memory or address.                                                   |
+| `ldrb`    | `ldrb w0, [x1]`                   | Load zero-extended byte.                                                                   |
+| `ldrh`    | `ldrh w0, [x1]`                   | Load zero-extended halfword (16-bit).                                                     |
+| `ldrsw`   | `ldrsw x0, [x1]`                  | Load signed 32-bit value and sign-extend to 64 bits.                                      |
+| `str`     | `str x0, [x1]`                    | Store 64-bit value to memory.                                                            |
+| `strb`    | `strb w0, [x1]`                   | Store 8-bit byte.                                                                       |
+| `strh`    | `strh w0, [x1]`                   | Store 16-bit halfword.                                                                  |
+| `stp`     | `stp x29, x30, [sp, #-16]!`      | Store pair — pushes 2 regs (used in function prologue).                                  |
+| `ldp`     | `ldp x29, x30, [sp], #16`        | Load pair — pops 2 regs (used in epilogue).                                              |
+
+---
+
+## 📌 System & Misc Instructions
+
+| Instruction | Example          | Description                                                                 |
+|------------|-------------------|-----------------------------------------------------------------------------|
+| `svc`     | `svc #0`         | Supervisor call (syscall). x16 = syscall number on macOS.                   |
+| `nop`     | `nop`           | No operation.                                                              |
+| `mrs`     | `mrs x0, nzcv` | Read system register into general register.                                |
+| `msr`     | `msr nzcv, x0` | Write system register from general register.                               |
+
+---
+
+## 📌 Condition Code Suffixes
+
+Used with conditional branches (`b.<cond>`), `csel`, `ccmp`, etc.
+
+| Suffix | Meaning                  | Condition Description                                                      |
+|--------|---------------------------|----------------------------------------------------------------------------|
+| `eq`  | Equal                    | Z == 1 (zero flag set)                                                    |
+| `ne`  | Not equal                | Z == 0                                                                    |
+| `cs`  | Carry set / unsigned ≥   | C == 1                                                                    |
+| `hs`  | Higher or same (unsigned) | Alias for `cs`                                                            |
+| `cc`  | Carry clear / unsigned < | C == 0                                                                    |
+| `lo`  | Lower (unsigned)         | Alias for `cc`                                                            |
+| `mi`  | Minus / negative        | N == 1                                                                    |
+| `pl`  | Plus / positive or zero | N == 0                                                                    |
+| `vs`  | Overflow set            | V == 1                                                                    |
+| `vc`  | Overflow clear          | V == 0                                                                    |
+| `hi`  | Higher (unsigned)       | C == 1 and Z == 0                                                         |
+| `ls`  | Lower or same (unsigned)| C == 0 or Z == 1                                                          |
+| `ge`  | Greater or equal (signed)| N == V                                                                    |
+| `lt`  | Less than (signed)      | N != V                                                                    |
+| `gt`  | Greater than (signed)  | Z == 0 and N == V                                                         |
+| `le`  | Less or equal (signed) | Z == 1 or N != V                                                          |
+| `al`  | Always                 | Always true (default for `b`)                                             |
+| `nv`  | Never                  | Reserved / deprecated                                                     |
+
+---
+
+## 📌 Quick Flag Meaning Recap
+
+| Flag | Name      | Set When...                                         |
+|------|-----------|-----------------------------------------------------|
+| N    | Negative | Result is negative (bit 63 == 1).                   |
+| Z    | Zero     | Result == 0.                                       |
+| C    | Carry    | Unsigned overflow occurred.                        |
+| V    | Overflow | Signed overflow occurred.                          |
+
+---
+
+## 📌 Register Naming Conventions
+
+| Register | Purpose                           |
+|----------|------------------------------------|
+| `x0–x7` | Argument / return value registers |
+| `x8–x18`| Temporary / scratch               |
+| `x19–x28`| Callee-saved                     |
+| `x29`   | Frame pointer                     |
+| `x30`   | Link register (return address)   |
+| `sp`    | Stack pointer                     |
+| `xzr`   | Zero register (reads as 0, writes are discarded) |
+| `wN`    | Lower 32 bits of `xN`             |
+
+# 🧠 Bare-Metal Multicore & Synchronization (ARM64)
+
+When running bare-metal (e.g., in EL1/EL3 without an operating system), there are **no special instructions to “spawn a core.”**  
+Instead, you use **system registers**, **spin tables**, and **event/synchronization primitives** to bring up secondary cores and coordinate them.
+
+---
+
+## 📌 Core Startup Instructions & Primitives
+
+| Instruction / Register | Example                           | Description                                                                 |
+|-------------------------|------------------------------------|-----------------------------------------------------------------------------|
+| `mrs` / `msr`          | `mrs x0, MPIDR_EL1`               | Read/write system registers (e.g., MPIDR_EL1 for core ID, SCTLR_EL1 for control). |
+| `sev`                  | `sev`                             | Send Event — wakes up cores waiting in `wfe`.                              |
+| `wfe`                  | `wfe`                             | Wait For Event — used by secondary cores to sleep until released.          |
+| `dmb sy`               | `dmb sy`                          | Data Memory Barrier — ensures memory operations complete before continuing. |
+| `dsb sy`               | `dsb sy`                          | Data Synchronization Barrier — stronger ordering guarantee.                |
+| `isb`                  | `isb`                             | Instruction Synchronization Barrier — flush pipeline after register writes. |
+| `ldxr` / `stxr`        | `ldxr w0, [x1]` / `stxr w2, w0, [x1]` | Load-exclusive / store-exclusive pair — used for atomic memory operations (locks, semaphores). |
+| `ldaxr` / `stlxr`      | `ldaxr w0, [x1]`                  | Acquire/Release variants for ordered atomic ops.                           |
+| `MPIDR_EL1`           | `mrs x0, MPIDR_EL1`              | Provides the core’s affinity ID (used to distinguish cores).              |
+| `SCTLR_EL1`           | `mrs x0, SCTLR_EL1`              | System control register — controls MMU, caches, endianness, etc.         |
+
+---
+
+## 📌 Typical Bare-Metal Multicore Bring-Up Flow
+
+1. **Primary Core Boot**
+   - Sets up stack and exception levels.
+   - Writes secondary entry addresses to a known **spin table** in memory.
+   - Executes `sev` to wake secondary cores.
+
+2. **Secondary Cores**
+   - Start in a minimal ROM loop polling their spin-table address:
+     ```asm
+     spin:
+         ldr x0, [core_spin_addr]
+         cbz x0, spin
+         br x0    // Jump to secondary entry point
+     ```
+   - On `sev`, they see a non-zero address and jump to it.
+
+3. **Secondary Entry Code**
+   - Sets up its own stack pointer.
+   - Initializes per-core state.
+   - Joins the kernel or scheduler.
+
+---
+
+## 📌 Example: Spin Table Release
+
+```asm
+// Primary core
+ldr x1, =spin_table_core1   // Known physical address
+ldr x0, =secondary_entry
+str x0, [x1]
+sev                         // Wake sleeping secondary cores
