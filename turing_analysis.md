@@ -116,6 +116,7 @@ Actly can simulate recursive functions through:
 - **Rich data structures**: Comprehensive built-in types
 - **Message passing**: Natural communication model
 - **Atom-based design**: Immutable identifiers for reliable message routing and pattern matching
+- **Complete actor model**: All 7 actor types provide comprehensive system coverage
 
 ### **Potential Limitations**
 - **Template expressiveness**: May need additional templates for complex algorithms
@@ -132,6 +133,7 @@ Actly can simulate recursive functions through:
 3. **Rich data structure support** for complex data manipulation
 4. **State management** through actor state and Keep template
 5. **Recursive capabilities** through self-messaging
+6. **Complete actor ecosystem** with all 7 actor types providing comprehensive system coverage
 
 The language can compute any computable function, simulate any Turing machine, and express any recursive algorithm through its combination of actors, templates, and message passing.
 

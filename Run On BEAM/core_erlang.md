@@ -30,6 +30,7 @@ Core Erlang is an intermediate representation of the Erlang programming language
 - **Examples**:
   - Integers: `42`, `-17`, `0`
   - Floats: `3.14`, `-2.5`, `0.0`
+  - Scientific notation: `1e6`, `2.5e-3`, `1.23e+4`, `5e-2`
   - Atoms: `'ok'`, `'error'`, `'undefined'`
   - Strings: `"hello"`, `"world"`
   - Booleans: `true`, `false`
