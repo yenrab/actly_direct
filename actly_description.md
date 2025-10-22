@@ -43,8 +43,8 @@ These data structures are not part of a library. They are an integral part of th
 **Tuples**: Regular data structures, no special prefix required.
 **Examples**: 
 - Variables: taskId, userData, processName, result
-- Atoms: @taskId, @userData, @processName, @result
-- Tuples: (taskId, userData), (processName, result) (tuples can have any combination of variables and atoms)
+- Atoms: @taskId, @user, @processID, @true, @false
+- Tuples: {@user, "bob"}, {@user,@bob}, {@done, computation}, {@ok,PhoneDictionary,AddressDictionary,@idaho} (tuples of with any number of elements can have any combination of variables and atoms in any order)
 
 ##Message Protocol Declarations
 Define message protocols before actor implementations for clear LLM understanding of actor communication.
@@ -65,9 +65,6 @@ Used by the programmer to implement all behavior in the system
 **Filter** Pick From <data structure> with <calculation>
 **Reduce** Combine <data structure> into <result> using <calculation>
 **For Each** With Each of the <data structure> <calculation>
-**Conditional Match Branching** match-pattern <some value> <other value>
-**Conditional Comparison Branching** match-condition <some value> <comparison>
-**Conditional Default Branching** match-default <some value>
 **Variable Declaration** Tag <some_value> with <some_label>
 **Peak** Peak into <data structure> and tag<some tag or tags> 
 **Message** Send <message> to <name>
@@ -78,81 +75,128 @@ Used by the programmer to implement all behavior in the system
 **Unzip** Unzip <data structure> into <structure1> and <structure2>
 **Tuple Decomposition** match <data> and tag <tuple pattern>
 
-##Match Template Rules and Examples
+##Match Template and Translation
 
-###Conditional Match Branching
-**Purpose**: Pattern matching for exact values and message routing
-**Syntax**: `match-pattern <value> <pattern>`
-**Rules**: 
-- Use for exact value matching
-- Patterns can include atoms, variables, and data structures
-- First match wins - only one match executes per sequence
+###Conditional Branching
+**Purpose**: Pattern matching to decide in a case-like manner what is to be done when a match occures. Matches must be makeable between types, values, and have a catch-all available as well.
 
+**Programmer Input**
 
-###Conditional Comparison Branching
-**Purpose**: Conditional logic with comparisons and calculations
-**Syntax**: `match-condition <value> <condition>`
-**Rules**:
-- Use for conditional logic based on comparisons
-- Conditions can include arithmetic, logical, and comparison operations
-- Multiple conditions can be chained with logical operators
-
+####Exact Value Matching
+**Actly Form**: `match <value> with <exact_value>`
 **Examples**:
-```actly
-match-condition processedVotes
-    voteCount >= threshold
-    // Handle consensus reached
+- `match status with @active`
+- `match count with 0`
+- `match message with @timeout`
 
-match-condition processedVotes
-    voteCount < threshold
-    // Handle consensus pending
-
-match-condition userAge
-    age >= 18
-    // Handle adult users
-```
-
-###Conditional Default Branching
-**Purpose**: Catch-all for unmatched conditions and error handling
-**Syntax**: `match-default <value>`
-**Rules**:
-- Use as the final match in a sequence
-- Handles any unmatched conditions
-- Always executes if no other matches succeed
-- Essential for robust error handling
-
+####Pattern Matching with Guards
+**Actly Form**: `match <pattern> with <value> when <condition>`
 **Examples**:
-```actly
-match-default processedVotes
-    // Handle unexpected vote states
+- `match {status, count} with {Status, Count} when Count > 0`
+- `match message with {@vote, Data} when Data /= null`
+- `match state with @processing when timeout < 5000`
 
-match-default userInput
-    // Handle invalid input
+####Type-Based Matching
+**Actly Form**: `match <value> as <type>`
+**Examples**:
+- `match data as String`
+- `match result as Number`
+- `match payload as Dictionary`
 
-match-default systemState
-    // Handle error conditions
+####Catch-All Matching
+**Actly Form**: `otherwise`
+**Examples**:
+- `otherwise`
+
+**Core Erlang Translation**
+
+####Exact Value Matching
+**Actly Form**: `check if <value> is <exact_value> then <action> otherwise <default_action>`
+**Core Erlang Translation**:
+```erlang
+case <value> of
+  <exact_value> ->
+    % Handle exact match
+    Result;
+  _ ->
+    % Handle no match
+    DefaultResult
+end
 ```
 
-###Complete Match Sequence Example
-```actly
-match-condition processedVotes
-    voteCount >= threshold
-    // Handle consensus reached
-    Send {@consensus, Result} to participants
-
-match-condition processedVotes
-    voteCount < threshold
-    // Handle consensus pending
-    Send {@pending, voteCount, threshold} to ParticipantId
-
-match-default processedVotes
-    // Handle errors and edge cases
-    Send {@error, @unexpectedState} to ParticipantId
+####Pattern Matching with Guards
+**Actly Form**: `check if <value> is <pattern> and <condition> then <action> otherwise <default_action>`
+**Core Erlang Translation**:
+```erlang
+case <value> of
+  <pattern> when <condition> ->
+    % Handle pattern match with guard
+    Result;
+  _ ->
+    % Handle no match
+    DefaultResult
+end
 ```
 
-##LLM Translation Guide
+####Type-Based Matching
+**Actly Form**: `check if <value> is a <type> then <action> otherwise <default_action>`
+**Core Erlang Translation**:
+```erlang
+case <value> of
+  <type> ->
+    % Handle type match
+    Result;
+  _ ->
+    % Handle type mismatch
+    DefaultResult
+end
+```
 
-This section provides comprehensive mappings from Actly language constructs to Core Erlang code, enabling LLMs to translate near-natural language Actly descriptions into working Core Erlang implementations.
+####Complex Multi-Pattern Matching
+**Actly Form**: 
+```
+check if <value> is <pattern1> then <action1>
+check if <value> is <pattern2> then <action2>
+check if <value> is <pattern3> then <action3>
+otherwise <default_action>
+```
+**Core Erlang Translation**:
+```erlang
+case <value> of
+  <pattern1> ->
+    % Handle pattern1
+    Result1;
+  <pattern2> ->
+    % Handle pattern2
+    Result2;
+  <pattern3> ->
+    % Handle pattern3
+    Result3;
+  _ ->
+    % Handle no match
+    DefaultResult
+end
+```
+
+####Nested Pattern Matching
+**Actly Form**: `check if <value> is {<pattern1>, <pattern2>} and <condition> then <action> otherwise <default_action>`
+**Core Erlang Translation**:
+```erlang
+case <value> of
+  {<pattern1>, <pattern2>} when <condition> ->
+    % Handle nested pattern match
+    Result;
+  _ ->
+    % Handle no match
+    DefaultResult
+end
+```
+
+
+
+
+
+
 
 ###Process Type Scaffolding Templates
 
