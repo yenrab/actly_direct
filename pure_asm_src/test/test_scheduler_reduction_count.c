@@ -51,35 +51,15 @@ void test_scheduler_decrement_reductions();
 void test_scheduler_reduction_count() {
     printf("\n--- Testing scheduler reduction count (Pure Assembly) ---\n");
     
-    printf("DEBUG: About to call test_scheduler_get_reduction_count()\n");
-    fflush(stdout);
     test_scheduler_get_reduction_count();
-    printf("DEBUG: test_scheduler_get_reduction_count() completed\n");
-    fflush(stdout);
     
-    printf("DEBUG: About to call test_scheduler_set_reduction_count_with_state()\n");
-    fflush(stdout);
     test_scheduler_set_reduction_count_with_state();
-    printf("DEBUG: test_scheduler_set_reduction_count_with_state() completed\n");
-    fflush(stdout);
     
-    printf("DEBUG: About to call test_scheduler_reduction_count_cross_core_isolation()\n");
-    fflush(stdout);
     test_scheduler_reduction_count_cross_core_isolation();
-    printf("DEBUG: test_scheduler_reduction_count_cross_core_isolation() completed\n");
-    fflush(stdout);
     
-    printf("DEBUG: About to call test_scheduler_reduction_count_boundary_values()\n");
-    fflush(stdout);
     test_scheduler_reduction_count_boundary_values();
-    printf("DEBUG: test_scheduler_reduction_count_boundary_values() completed\n");
-    fflush(stdout);
     
-    printf("DEBUG: About to call test_scheduler_decrement_reductions()\n");
-    fflush(stdout);
     test_scheduler_decrement_reductions();
-    printf("DEBUG: test_scheduler_decrement_reductions() completed\n");
-    fflush(stdout);
 }
 
 // ------------------------------------------------------------

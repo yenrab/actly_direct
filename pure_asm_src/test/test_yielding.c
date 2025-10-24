@@ -645,8 +645,6 @@ void test_process_yield_with_pcb() {
     // BINARY SEARCH DEBUG: Commenting out test 2 to isolate crash location
     /*
     // Test 2: process_yield with different PCB
-    printf("DEBUG: Starting test 2 - process_yield with different PCB\n");
-    fflush(stdout);
     
     // Create isolated scheduler state for test 2
     void* scheduler_state_2 = scheduler_state_init(1);
@@ -656,11 +654,7 @@ void test_process_yield_with_pcb() {
     }
     
     // Initialize scheduler for core 0
-    printf("DEBUG: About to call scheduler_init for test 2\n");
-    fflush(stdout);
     scheduler_init(scheduler_state_2, 0);
-    printf("DEBUG: scheduler_init for test 2 completed\n");
-    fflush(stdout);
     
     // Create isolated PCB for test 2
     test_process_t* pcb_2 = (test_process_t*)malloc(512); // Allocate full PCB size
@@ -684,36 +678,18 @@ void test_process_yield_with_pcb() {
         pcb_2->pcb_size = 512; // Set the PCB size field
         
         // Set as current process
-        printf("DEBUG: About to call scheduler_set_current_process_with_state for test 2\n");
-        fflush(stdout);
         scheduler_set_current_process_with_state(scheduler_state_2, 0, pcb_2);
-        printf("DEBUG: scheduler_set_current_process_with_state for test 2 completed\n");
-        fflush(stdout);
         
         // Test process_yield
-        printf("DEBUG: About to call process_yield_with_state for test 2\n");
-        fflush(stdout);
         void* result = process_yield_with_state(scheduler_state_2, 0, pcb_2);
-        printf("DEBUG: process_yield_with_state for test 2 returned: %p\n", result);
-        fflush(stdout);
         test_assert_not_zero((uint64_t)result, "process_yield should return a valid result for test 2");
         
         // Cleanup test 2
-        printf("DEBUG: About to free pcb_2\n");
-        fflush(stdout);
         free(pcb_2);
-        printf("DEBUG: pcb_2 freed successfully\n");
-        fflush(stdout);
     }
     
     // Clean up scheduler state for test 2
-    printf("DEBUG: About to call scheduler_state_destroy for test 2\n");
-    fflush(stdout);
     scheduler_state_destroy(scheduler_state_2);
-    printf("DEBUG: scheduler_state_destroy for test 2 completed\n");
-    printf("DEBUG: Test 2 cleanup completed\n");
-    fflush(stdout);
-    fflush(stdout);
     */
     
     printf("✓ process_yield with PCB tests passed\n");

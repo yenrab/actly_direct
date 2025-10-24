@@ -289,6 +289,25 @@ test: $(TARGET)
 	@echo ""
 	@echo "========================================="
 
+# Coverage test target
+coverage: $(TARGET)
+	@echo "========================================="
+	@echo "CODE COVERAGE ANALYSIS"
+	@echo "========================================="
+	@echo "Running comprehensive scheduler tests..."
+	@rm -f ../lib/bin/scheduler_tests_output.log
+	@../lib/test/$(TARGET) > ../lib/bin/scheduler_tests_output.log 2>&1
+	@cat ../lib/bin/scheduler_tests_output.log
+	@echo ""
+	@echo "========================================="
+	@echo "COVERAGE ANALYSIS"
+	@echo "========================================="
+	@echo "Total Assertions: $$(grep 'Total Assertions:' ../lib/bin/scheduler_tests_output.log 2>/dev/null | tail -1 | grep -o '[0-9]\+' || echo 'N/A')"
+	@echo "Assertions Passed: $$(grep 'Assertions Passed:' ../lib/bin/scheduler_tests_output.log 2>/dev/null | tail -1 | grep -o '[0-9]\+' || echo 'N/A')"
+	@echo "Success Rate: $$(grep 'Success Rate:' ../lib/bin/scheduler_tests_output.log 2>/dev/null | tail -1 | grep -o '[0-9.]\+%' || echo 'N/A')"
+	@echo "Coverage Analysis: See work_docs/coverage_analysis_final.md for detailed coverage report"
+	@echo "========================================="
+
 # Scheduler test group
 test_scheduler_group: test_init_exe test_get_set_exe test_reduction_exe test_core_id_exe test_helper_exe test_edge_cases_exe test_scheduler_queue_length_exe
 	@echo "Running scheduler tests..."
@@ -396,6 +415,7 @@ help:
 	@echo "Main targets:"
 	@echo "  all           - Build the combined scheduler tests (default)"
 	@echo "  test          - Build and run comprehensive scheduler tests"
+	@echo "  coverage      - Run tests and show coverage analysis"
 	@echo "  clean         - Remove all generated files"
 	@echo "  help          - Show this help message"
 	@echo ""
@@ -417,4 +437,4 @@ help:
 	@echo "  ship_ready_test - Build and run ship-ready scheduler test"
 
 # Phony targets
-.PHONY: all test test_pcb test_scheduler test_all test_scheduler_group test_process_group test_individual ship_ready_test integration-tests test-integration clean-test-integration clean help test_objects
+.PHONY: all test coverage test_pcb test_scheduler test_all test_scheduler_group test_process_group test_individual ship_ready_test integration-tests test-integration clean-test-integration clean help test_objects

@@ -106,7 +106,6 @@ static void test_get_scheduler_load_basic() {
     // Test with core 0 (should work even if scheduler not fully initialized)
     uint32_t load = get_scheduler_load(0);
     
-    printf("DEBUG: get_scheduler_load(0) returned: %u\n", load);
     
     // Simple test without framework first
     if (load == 0) {

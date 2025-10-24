@@ -231,7 +231,6 @@ void test_fail(uint64_t expected, uint64_t actual, const char* test_name) {
 void test_print_results(void) {
     
     printf("\n=== Test Results ===\n");
-    fflush(stdout);
     
     printf("Total Assertions: %llu\n", test_passed_count + test_failed_count);
     printf("Assertions Passed: %llu\n", test_passed_count);

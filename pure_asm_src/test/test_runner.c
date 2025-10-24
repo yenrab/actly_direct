@@ -127,72 +127,28 @@ void test_runner_main() {
     // Run new Phase 6 yielding and blocking tests
     // NOTE: These tests have been fixed and are now working!
     // The illegal instruction errors have been resolved.
-    // printf("DEBUG: About to call test_yielding_main()\n");
-    // fflush(stdout);
     // test_yielding_main();
-    // printf("DEBUG: test_yielding_main() completed\n");
-    // fflush(stdout);
     
-    // printf("DEBUG: About to call test_blocking_main()\n");
-    // fflush(stdout);
     // test_blocking_main();
-    // printf("DEBUG: test_blocking_main() completed\n");
-    // fflush(stdout);
     
-    // printf("DEBUG: About to call test_actly_bifs_main()\n");
-    // fflush(stdout);
     // test_actly_bifs_main();
-    // printf("DEBUG: test_actly_bifs_main() completed\n");
-    // fflush(stdout);
     
-    // printf("DEBUG: About to call test_integration_yielding_main()\n");
-    // fflush(stdout);
     // test_integration_yielding_main();
-    // printf("DEBUG: test_integration_yielding_main() completed\n");
-    // fflush(stdout);
     
     // Run new Phase 6 individual test suites
-    // printf("DEBUG: About to call test_process_yield_basic()\n");
-    // fflush(stdout);
     // test_process_yield_basic();
-    // printf("DEBUG: test_process_yield_basic() completed\n");
-    // fflush(stdout);
     
-    // printf("DEBUG: About to call test_process_yield_with_pcb()\n");
-    // fflush(stdout);
     // test_process_yield_with_pcb();
-    // printf("DEBUG: test_process_yield_with_pcb() completed\n");
-    // fflush(stdout);
     
-    // printf("DEBUG: About to call test_process_save_context_basic()\n");
-    // fflush(stdout);
     // test_process_save_context_basic();
-    // printf("DEBUG: test_process_save_context_basic() completed\n");
-    // fflush(stdout);
     
-    // printf("DEBUG: About to call test_process_restore_context_basic()\n");
-    // fflush(stdout);
     // test_process_restore_context_basic();
-    // printf("DEBUG: test_process_restore_context_basic() completed\n");
-    // fflush(stdout);
     
-    // printf("DEBUG: About to call test_context_functions_edge_cases()\n");
-    // fflush(stdout);
     // test_context_functions_edge_cases();
-    // printf("DEBUG: test_context_functions_edge_cases() completed\n");
-    // fflush(stdout);
     
-    // printf("DEBUG: About to call test_integration_yield_scheduling()\n");
-    // fflush(stdout);
     // test_integration_yield_scheduling();
-    // printf("DEBUG: test_integration_yield_scheduling() completed\n");
-    // fflush(stdout);
     
-    // printf("DEBUG: About to call test_integration_multiple_processes()\n");
-    // fflush(stdout);
     // test_integration_multiple_processes();
-    // printf("DEBUG: test_integration_multiple_processes() completed\n");
-    // fflush(stdout);
     
     // Print test results
     test_print_results();

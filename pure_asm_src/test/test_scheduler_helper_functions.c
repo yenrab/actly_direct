@@ -58,11 +58,7 @@ void test_scheduler_helper_functions() {
     // Note: get_scheduler_state() and get_priority_queue() are already tested in other test files
     // to avoid API conflicts and memory corruption from duplicate testing
     
-    printf("DEBUG: About to call test_scheduler_data_structure_layout()\n");
-    fflush(stdout);
     test_scheduler_data_structure_layout();
-    printf("DEBUG: test_scheduler_data_structure_layout() completed\n");
-    fflush(stdout);
 }
 
 // ------------------------------------------------------------
