@@ -104,8 +104,6 @@
     .global _process_is_runnable
     .global _allocate_pcb
     .global _free_pcb
-    .global _debug_marker_process_create
-    .global debug_marker_process_create
 
 // ------------------------------------------------------------
 // Process Control Block Structure Field Offset Exports
@@ -241,13 +239,6 @@
     .data
     .align 3
 
-// Debug marker variables
-_debug_marker_process_create:
-    .quad 0  // Will be set to 0x1234 when _process_create is called
-
-_debug_memory_error:
-    .quad 0  // Error code (0 = no error, 1 = MMAP_FAILED)
-    .quad 0  // Requested size that failed
 
 _DEFAULT_STACK_SIZE:
     .quad 8192
@@ -362,15 +353,16 @@ PCB_SIZE:
     .equ pcb_last_scheduled, 376       // Last scheduled timestamp (8 bytes)
     .equ pcb_affinity_mask, 384        // CPU affinity mask (8 bytes)
     .equ pcb_migration_count, 392      // Migration count (8 bytes)
-    .equ pcb_stack_pointer, 400        // Current stack pointer (bump allocator) (8 bytes)
-    .equ pcb_stack_limit, 408          // Stack limit (8 bytes)
-    .equ pcb_heap_pointer, 416         // Current heap pointer (bump allocator) (8 bytes)
-    .equ pcb_heap_limit, 424           // Heap limit (8 bytes)
-    .equ pcb_blocking_reason, 432      // Blocking reason code (8 bytes)
-    .equ pcb_blocking_data, 440         // Blocking-specific data (8 bytes)
-    .equ pcb_wake_time, 448            // Timer wake time (8 bytes)
-    .equ pcb_message_pattern, 456      // Receive pattern (8 bytes)
-    .equ pcb_size, 464                 // Total PCB size (8 bytes)
+    .equ pcb_last_migration_time, 400   // Last migration timestamp (8 bytes)
+    .equ pcb_stack_pointer, 408        // Current stack pointer (bump allocator) (8 bytes)
+    .equ pcb_stack_limit, 416          // Stack limit (8 bytes)
+    .equ pcb_heap_pointer, 424         // Current heap pointer (bump allocator) (8 bytes)
+    .equ pcb_heap_limit, 432           // Heap limit (8 bytes)
+    .equ pcb_blocking_reason, 440      // Blocking reason code (8 bytes)
+    .equ pcb_blocking_data, 448         // Blocking-specific data (8 bytes)
+    .equ pcb_wake_time, 456            // Timer wake time (8 bytes)
+    .equ pcb_message_pattern, 464      // Receive pattern (8 bytes)
+    .equ pcb_size, 472                 // Total PCB size (8 bytes)
     .equ pcb_padding, 464              // Padding to align to 512 bytes
     .equ pcb_total_size, 512           // Total PCB size with padding
 
@@ -491,14 +483,6 @@ PCB_SIZE:
 //
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 _process_create:
-    // Conditional debug code - only enabled when DEBUG_PROCESS_CREATE is defined
-    #ifdef DEBUG_PROCESS_CREATE
-    // DEBUG: Function entry - set a debug marker in memory
-    adrp x0, _debug_marker_process_create@PAGE
-    add x0, x0, _debug_marker_process_create@PAGEOFF
-    mov x3, #0x1234  // DEBUG: Set a simple debug value (16-bit immediate)
-    str x3, [x0]  // DEBUG: Store debug marker to indicate function was called
-    #endif
 
     // Save only essential callee-saved registers (avoiding x20)
     stp x19, x30, [sp, #-16]!
@@ -1567,16 +1551,6 @@ expand_pool_mmap_failed:
     // mmap system call failed - handle error with proper logging and fallback strategies
     
     // Log the error (in production, this would write to system log)
-    // For now, we'll store error information in a debug location
-    #ifdef DEBUG_MEMORY_ALLOCATION
-    // Store error details for debugging
-    adrp x0, _debug_memory_error@PAGE
-    add x0, x0, _debug_memory_error@PAGEOFF
-    mov x1, #1  // Error code: MMAP_FAILED
-    str x1, [x0]  // Store error code
-    mov x1, x24  // Store requested size
-    str x1, [x0, #8]  // Store requested size
-    #endif
     
     // Try fallback allocation strategy: smaller allocation
     // Calculate 50% of requested size for fallback

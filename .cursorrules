@@ -1,0 +1,5 @@
+**Define AMW as Analyze the issue, Make suggestions, and Wait for user decisions.**
+
+**Compiliation is for Apple Silicon and MacOS. Follow the specific requiremets for this chip and OS.**
+
+**When doing a binary search-like debugging process, comment code in and out. Do not create files.**

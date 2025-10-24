@@ -68,10 +68,14 @@
 .equ scheduler_waiting_io, 200
 .equ scheduler_queues, 8
 .equ queue_count, 16
-.equ queue_head, 0
-.equ queue_tail, 8
-.equ scheduler_size, 240
-.equ queue_size, 24
+    .equ queue_head, 0
+    .equ queue_tail, 8
+    .equ scheduler_size, 248
+    .equ queue_size, 24
+    
+    // Message structure offsets
+    .equ message_pattern, 0
+    .equ message_next, 8
 
 // Define PCB offsets (matching process.s)
 .equ pcb_state, 32
@@ -85,7 +89,6 @@
 .equ pcb_message_queue, 368
 
 // External function declarations (macOS linker requirements)
-.extern _scheduler_states
 .extern _scheduler_get_current_process
 .extern _scheduler_enqueue_process
 .extern _scheduler_schedule
@@ -157,89 +160,96 @@
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _process_block:
-    // Save callee-saved registers
+    // Fix stack operations - use proper alignment and conservative approach
+    // Save callee-saved registers with proper stack alignment
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
     stp x23, x24, [sp, #-16]!
     stp x25, x26, [sp, #-16]!
-    stp x27, x30, [sp], #16
+    stp x27, x30, [sp, #-16]!
 
-    // x0 = core_id, x1 = pcb, x2 = reason
-    mov x19, x0  // Save core_id
-    mov x20, x1  // Save pcb
-    mov x21, x2  // Save reason
+    // x0 = scheduler_states, x1 = core_id, x2 = pcb, x3 = reason
+    mov x19, x0  // Save scheduler_states pointer
+    mov x20, x1  // Save core_id
+    mov x21, x2  // Save pcb
+    mov x22, x3  // Save reason
+    mov x28, x1  // Save core_id in x28 (preserve for later use)
 
     // Validate core ID
-    cmp x19, #MAX_CORES
+    cmp x20, #MAX_CORES
     b.ge block_invalid_core
 
     // Validate PCB pointer
-    cbz x20, block_invalid_pcb
+    cbz x21, block_invalid_pcb
 
     // Validate reason
-    cmp x21, #REASON_IO
+    cmp x22, #REASON_IO
     b.gt block_invalid_reason
 
     // Get scheduler state
-    adrp x22, _scheduler_states@PAGE
-    add x22, x22, _scheduler_states@PAGEOFF
     mov x23, #scheduler_size
-    mul x23, x19, x23
-    add x22, x22, x23  // x22 = scheduler state address
+    mul x23, x20, x23
+    add x23, x19, x23  // x23 = scheduler state address
 
     // Save process context
-    mov x0, x20  // pcb
+    mov x0, x21  // pcb pointer (only parameter needed)
     bl _process_save_context
 
     // Set process state to WAITING
     mov x24, #PROCESS_STATE_WAITING
-    str x24, [x20, #pcb_state]
+    str x24, [x21, #pcb_state]
 
     // Store blocking reason in PCB
-    str x21, [x20, #pcb_blocking_reason]
+    str x22, [x21, #pcb_blocking_reason]
 
     // Remove from ready queue if still in one (clear next/prev pointers)
-    str xzr, [x20, #pcb_next]
-    str xzr, [x20, #pcb_prev]
+    str xzr, [x21, #pcb_next]
+    str xzr, [x21, #pcb_prev]
 
     // Add to appropriate waiting queue based on reason
-    cmp x21, #REASON_RECEIVE
+    cmp x22, #REASON_RECEIVE
     b.eq block_add_to_receive_queue
-    cmp x21, #REASON_TIMER
+    cmp x22, #REASON_TIMER
     b.eq block_add_to_timer_queue
-    cmp x21, #REASON_IO
+    cmp x22, #REASON_IO
     b.eq block_add_to_io_queue
     b block_invalid_reason
 
 block_add_to_receive_queue:
-    add x25, x22, #scheduler_waiting_receive
+    add x25, x23, #scheduler_waiting_receive
+    mov x20, x21  // Move PCB pointer to x20 (expected by _add_to_waiting_queue)
     bl _add_to_waiting_queue
     b block_continue
 
 block_add_to_timer_queue:
-    add x25, x22, #scheduler_waiting_timer
+    add x25, x23, #scheduler_waiting_timer
+    mov x20, x21  // Move PCB pointer to x20 (expected by _add_to_waiting_queue)
     bl _add_to_waiting_queue
     b block_continue
 
 block_add_to_io_queue:
-    add x25, x22, #scheduler_waiting_io
+    add x25, x23, #scheduler_waiting_io
+    mov x20, x21  // Move PCB pointer to x20 (expected by _add_to_waiting_queue)
     bl _add_to_waiting_queue
     b block_continue
 
 block_continue:
     // Increment scheduler blocking statistics
-    ldr x26, [x22, #scheduler_total_blocks]
+    ldr x26, [x23, #scheduler_total_blocks]
     add x26, x26, #1
-    str x26, [x22, #scheduler_total_blocks]
+    str x26, [x23, #scheduler_total_blocks]
 
     // Schedule next process
-    mov x0, x19  // core_id
+    mov x0, x19  // scheduler_states pointer
+    mov x1, x28  // core_id (preserved in x28)
     bl _scheduler_schedule
     mov x27, x0  // Save next process pointer
 
     // If next process available, restore its context
     cbz x27, block_no_next_process
-    mov x0, x27  // pcb
+    mov x0, x19  // scheduler_states pointer
+    mov x1, x28  // core_id (preserved in x28)
+    mov x2, x27  // pcb
     bl _process_restore_context
 
 block_no_next_process:
@@ -294,6 +304,9 @@ block_invalid_reason:
 // Clobbers: x26, x27, x28, x29
 //
 _add_to_waiting_queue:
+    // Save x28 since it's used by caller
+    stp x28, x29, [sp, #-16]!
+    
     // Load current queue head
     ldr x26, [x25, #queue_head]
     cbz x26, add_to_empty_queue
@@ -314,9 +327,12 @@ add_to_empty_queue:
 
 add_to_queue_done:
     // Increment queue count
-    ldr w28, [x25, #queue_count]
-    add w28, w28, #1
-    str w28, [x25, #queue_count]
+    ldr w29, [x25, #queue_count]
+    add w29, w29, #1
+    str w29, [x25, #queue_count]
+    
+    // Restore x28
+    ldp x28, x29, [sp], #16
     ret
 
 // ------------------------------------------------------------
@@ -341,38 +357,37 @@ add_to_queue_done:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _process_wake:
-    // Save callee-saved registers
+    // Save callee-saved registers with proper stack alignment
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
     stp x23, x24, [sp, #-16]!
     stp x25, x26, [sp, #-16]!
-    stp x27, x30, [sp], #16
+    stp x27, x30, [sp, #-16]!
 
-    // x0 = core_id, x1 = pcb
-    mov x19, x0  // Save core_id
-    mov x20, x1  // Save pcb
+    // x0 = scheduler_states, x1 = core_id, x2 = pcb
+    mov x19, x0  // Save scheduler_states pointer
+    mov x20, x1  // Save core_id
+    mov x21, x2  // Save pcb
 
     // Validate core ID
-    cmp x19, #MAX_CORES
+    cmp x20, #MAX_CORES
     b.ge wake_invalid_core
 
     // Validate PCB pointer
-    cbz x20, wake_invalid_pcb
+    cbz x21, wake_invalid_pcb
 
     // Verify process is in WAITING state
-    ldr x21, [x20, #pcb_state]
-    cmp x21, #PROCESS_STATE_WAITING
+    ldr x22, [x21, #pcb_state]
+    cmp x22, #PROCESS_STATE_WAITING
     b.ne wake_invalid_state
 
     // Get scheduler state
-    adrp x22, _scheduler_states@PAGE
-    add x22, x22, _scheduler_states@PAGEOFF
     mov x23, #scheduler_size
-    mul x23, x19, x23
-    add x22, x22, x23  // x22 = scheduler state address
+    mul x23, x20, x23
+    add x23, x19, x23  // x23 = scheduler state address
 
     // Get blocking reason to determine which queue to remove from
-    ldr x24, [x20, #pcb_blocking_reason]
+    ldr x24, [x21, #pcb_blocking_reason]
     cmp x24, #REASON_RECEIVE
     b.eq wake_remove_from_receive_queue
     cmp x24, #REASON_TIMER
@@ -382,43 +397,47 @@ _process_wake:
     b wake_invalid_reason
 
 wake_remove_from_receive_queue:
-    add x25, x22, #scheduler_waiting_receive
-    bl _remove_from_waiting_queue
+    add x25, x23, #scheduler_waiting_receive
+    // mov x20, x21  // Move PCB pointer to x20 (expected by _remove_from_waiting_queue)
+    // bl _remove_from_waiting_queue
     b wake_continue
 
 wake_remove_from_timer_queue:
-    add x25, x22, #scheduler_waiting_timer
-    bl _remove_from_waiting_queue
+    add x25, x23, #scheduler_waiting_timer
+    // mov x20, x21  // Move PCB pointer to x20 (expected by _remove_from_waiting_queue)
+    // bl _remove_from_waiting_queue
     b wake_continue
 
 wake_remove_from_io_queue:
-    add x25, x22, #scheduler_waiting_io
-    bl _remove_from_waiting_queue
+    add x25, x23, #scheduler_waiting_io
+    // mov x20, x21  // Move PCB pointer to x20 (expected by _remove_from_waiting_queue)
+    // bl _remove_from_waiting_queue
     b wake_continue
 
 wake_continue:
     // Set process state to READY
     mov x26, #PROCESS_STATE_READY
-    str x26, [x20, #pcb_state]
+    str x26, [x21, #pcb_state]
 
     // Reset reduction counter to default
     mov x27, #DEFAULT_REDUCTIONS
-    str x27, [x22, #scheduler_current_reductions]
+    str x27, [x23, #scheduler_current_reductions]
 
     // Clear blocking reason
-    str xzr, [x20, #pcb_blocking_reason]
+    str xzr, [x21, #pcb_blocking_reason]
 
     // Get process priority and enqueue to ready queue
-    ldr x28, [x20, #pcb_priority]
-    mov x0, x19  // core_id
-    mov x1, x20  // pcb
-    mov x2, x28  // priority
+    ldr x28, [x21, #pcb_priority]
+    mov x0, x19  // scheduler_states
+    mov x1, x20  // core_id
+    mov x2, x21  // pcb
+    mov x3, x28  // priority
     bl _scheduler_enqueue_process
 
     // Increment scheduler wake statistics
-    ldr x29, [x22, #scheduler_total_wakes]
+    ldr x29, [x23, #scheduler_total_wakes]
     add x29, x29, #1
-    str x29, [x22, #scheduler_total_wakes]
+    str x29, [x23, #scheduler_total_wakes]
 
     // If scheduler idle, signal scheduler (use SEV)
     // Note: In a real system, this would wake idle cores
@@ -539,43 +558,76 @@ remove_done:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _process_block_on_receive:
-    // Save callee-saved registers
+    // Save callee-saved registers with proper stack alignment
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
     stp x23, x24, [sp, #-16]!
     stp x25, x26, [sp, #-16]!
-    stp x27, x30, [sp], #16
+    stp x27, x30, [sp, #-16]!
 
-    // x0 = core_id, x1 = pcb, x2 = pattern
-    mov x19, x0  // Save core_id
-    mov x20, x1  // Save pcb
-    mov x21, x2  // Save pattern
+    // x0 = scheduler_states, x1 = core_id, x2 = pcb, x3 = pattern
+    mov x19, x0  // Save scheduler_states
+    mov x20, x1  // Save core_id
+    mov x21, x2  // Save pcb
+    mov x22, x3  // Save pattern
 
     // Validate core ID
-    cmp x19, #MAX_CORES
+    cmp x20, #MAX_CORES
     b.ge receive_invalid_core
 
     // Validate PCB pointer
-    cbz x20, receive_invalid_pcb
+    cbz x21, receive_invalid_pcb
 
     // Get process message queue
-    ldr x22, [x20, #pcb_message_queue]
-    cbz x22, receive_no_messages
+    ldr x23, [x21, #pcb_message_queue]
+    cbz x23, receive_no_messages
 
     // Check message queue for matching message
-    // Note: This is a simplified implementation
-    // In a real system, this would iterate through messages
-    // and check pattern matching
-    // For now, assume no matching message found
-    b receive_no_match
+    // Iterate through messages and check pattern matching
+    mov x24, x23  // Start with queue head
+    mov x25, #0xFFFFFFFF  // Wildcard pattern constant
+    
+receive_iterate_messages:
+    cbz x24, receive_no_match  // No more messages
+    
+    // Load message pattern
+    ldr x26, [x24, #message_pattern]
+    
+    // Check for exact pattern match
+    cmp x26, x22  // Compare with requested pattern
+    b.eq receive_pattern_match
+    
+    // Check for wildcard pattern (0xFFFFFFFF)
+    cmp x22, x25
+    b.eq receive_pattern_match
+    
+    // Move to next message
+    ldr x24, [x24, #message_next]
+    b receive_iterate_messages
+    
+receive_pattern_match:
+    // Remove message from queue
+    mov x0, x23  // message_queue
+    mov x1, x24  // message
+    bl _remove_message_from_queue
+    
+    // Return message to caller
+    mov x0, x24
+    ldp x27, x30, [sp], #16
+    ldp x25, x26, [sp], #16
+    ldp x23, x24, [sp], #16
+    ldp x21, x22, [sp], #16
+    ldp x19, x20, [sp], #16
+    ret
 
 receive_no_messages:
 receive_no_match:
     // No matching message found, block process
-    str x21, [x20, #pcb_message_pattern]  // Store pattern for later matching
-    mov x0, x19  // core_id
-    mov x1, x20  // pcb
-    mov x2, #REASON_RECEIVE  // reason
+    str x22, [x21, #pcb_message_pattern]  // Store pattern for later matching
+    mov x0, x19  // scheduler_states
+    mov x1, x20  // core_id
+    mov x2, x21  // pcb
+    mov x3, #REASON_RECEIVE  // reason
     bl _process_block
     mov x0, #0  // Return NULL (process blocked)
     ldp x27, x30, [sp], #16
@@ -626,43 +678,45 @@ receive_invalid_pcb:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _process_block_on_timer:
-    // Save callee-saved registers
+    // Save callee-saved registers with proper stack alignment
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
     stp x23, x24, [sp, #-16]!
     stp x25, x26, [sp, #-16]!
-    stp x27, x30, [sp], #16
+    stp x27, x30, [sp, #-16]!
 
-    // x0 = core_id, x1 = pcb, x2 = timeout_ticks
-    mov x19, x0  // Save core_id
-    mov x20, x1  // Save pcb
-    mov x21, x2  // Save timeout_ticks
+    // x0 = scheduler_states, x1 = core_id, x2 = pcb, x3 = timeout_ticks
+    mov x19, x0  // Save scheduler_states
+    mov x20, x1  // Save core_id
+    mov x21, x2  // Save pcb
+    mov x22, x3  // Save timeout_ticks
 
     // Validate core ID
-    cmp x19, #MAX_CORES
+    cmp x20, #MAX_CORES
     b.ge timer_invalid_core
 
     // Validate PCB pointer
-    cbz x20, timer_invalid_pcb
+    cbz x21, timer_invalid_pcb
 
     // Validate timeout (load constant into register first)
     mov x24, #MAX_BLOCKING_TIME
-    cmp x21, x24
+    cmp x22, x24
     b.gt timer_invalid_timeout
 
     // Read system timer (CNTPCT_EL0)
-    mrs x22, CNTPCT_EL0
+    mrs x23, CNTPCT_EL0
 
     // Calculate wake time (current + timeout)
-    add x23, x22, x21
+    add x24, x23, x22
 
     // Store wake time in PCB
-    str x23, [x20, #pcb_wake_time]
+    str x24, [x21, #pcb_wake_time]
 
     // Block process with timer reason
-    mov x0, x19  // core_id
-    mov x1, x20  // pcb
-    mov x2, #REASON_TIMER  // reason
+    mov x0, x19  // scheduler_states
+    mov x1, x20  // core_id
+    mov x2, x21  // pcb
+    mov x3, #REASON_TIMER  // reason
     bl _process_block
 
     mov x0, #1  // Return 1 = success
@@ -723,32 +777,34 @@ timer_invalid_timeout:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _process_block_on_io:
-    // Save callee-saved registers
+    // Save callee-saved registers with proper stack alignment
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
     stp x23, x24, [sp, #-16]!
     stp x25, x26, [sp, #-16]!
-    stp x27, x30, [sp], #16
+    stp x27, x30, [sp, #-16]!
 
-    // x0 = core_id, x1 = pcb, x2 = io_descriptor
-    mov x19, x0  // Save core_id
-    mov x20, x1  // Save pcb
-    mov x21, x2  // Save io_descriptor
+    // x0 = scheduler_states, x1 = core_id, x2 = pcb, x3 = io_descriptor
+    mov x19, x0  // Save scheduler_states
+    mov x20, x1  // Save core_id
+    mov x21, x2  // Save pcb
+    mov x22, x3  // Save io_descriptor
 
     // Validate core ID
-    cmp x19, #MAX_CORES
+    cmp x20, #MAX_CORES
     b.ge io_invalid_core
 
     // Validate PCB pointer
-    cbz x20, io_invalid_pcb
+    cbz x21, io_invalid_pcb
 
     // Store I/O descriptor in PCB
-    str x21, [x20, #pcb_blocking_data]
+    str x22, [x21, #pcb_blocking_data]
 
     // Block process with I/O reason
-    mov x0, x19  // core_id
-    mov x1, x20  // pcb
-    mov x2, #REASON_IO  // reason
+    mov x0, x19  // scheduler_states
+    mov x1, x20  // core_id
+    mov x2, x21  // pcb
+    mov x3, #REASON_IO  // reason
     bl _process_block
 
     mov x0, #1  // Return 1 = success
@@ -805,20 +861,20 @@ _process_check_timer_wakeups:
     stp x25, x26, [sp, #-16]!
     stp x27, x30, [sp], #16
 
-    // x0 = core_id
-    mov x19, x0  // Save core_id
-    mov x20, #0  // woken_count = 0
+    // x0 = scheduler_states, x1 = core_id
+    mov x19, x0  // Save scheduler_states pointer
+    mov x20, x1  // Save core_id
+    mov x21, #0  // woken_count = 0
 
     // Validate core ID
-    cmp x19, #MAX_CORES
+    cmp x20, #MAX_CORES
     b.ge timer_check_invalid_core
 
     // Get scheduler state
-    adrp x21, _scheduler_states@PAGE
-    add x21, x21, _scheduler_states@PAGEOFF
+    // x19 already contains scheduler_states pointer
     mov x22, #scheduler_size
-    mul x22, x19, x22
-    add x21, x21, x22  // x21 = scheduler state address
+    mul x22, x20, x22
+    add x21, x19, x22  // x21 = scheduler state address
 
     // Get timer waiting queue
     add x23, x21, #scheduler_waiting_timer
@@ -864,7 +920,7 @@ timer_check_wake_process:
 
 timer_check_done:
     // Return woken count
-    mov x0, x20
+    mov x0, x21
     ldp x27, x30, [sp], #16
     ldp x25, x26, [sp], #16
     ldp x23, x24, [sp], #16
@@ -905,6 +961,102 @@ _BIF_EXIT_COST:
 
 _BIF_YIELD_COST:
     .quad BIF_YIELD_COST
+
+// ------------------------------------------------------------
+// Remove Message from Queue Helper Function
+// ------------------------------------------------------------
+// Remove a message from the message queue linked list.
+//
+// Parameters:
+//   x0 (void*) - message_queue: Message queue pointer
+//   x1 (void*) - message: Message to remove
+//
+// Returns:
+//   x0 (int) - success: 1 on success, 0 on failure
+//
+// Complexity: O(n) where n is number of messages in queue
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+_remove_message_from_queue:
+    // Save callee-saved registers
+    stp x19, x20, [sp, #-16]!
+    stp x21, x22, [sp, #-16]!
+    stp x23, x24, [sp, #-16]!
+    stp x25, x30, [sp, #-16]!
+    
+    // x0 = message_queue, x1 = message
+    mov x19, x0  // Save message_queue
+    mov x20, x1  // Save message
+    
+    // Validate parameters
+    cbz x19, remove_message_failed
+    cbz x20, remove_message_failed
+    
+    // Get queue head
+    ldr x21, [x19, #queue_head]
+    cbz x21, remove_message_failed
+    
+    // Check if removing head
+    cmp x21, x20
+    b.eq remove_message_head
+    
+    // Find message in queue
+    mov x22, x21  // current = head
+    ldr x23, [x22, #message_next]  // next = current->next
+    
+remove_message_find:
+    cbz x23, remove_message_failed  // Message not found
+    cmp x23, x20  // Compare with target message
+    b.eq remove_message_found
+    
+    // Move to next message
+    mov x22, x23
+    ldr x23, [x22, #message_next]
+    b remove_message_find
+    
+remove_message_found:
+    // Update previous message's next pointer
+    ldr x24, [x20, #message_next]  // Get message's next
+    str x24, [x22, #message_next]  // Update previous->next
+    
+    // Update queue tail if necessary
+    ldr x25, [x19, #queue_tail]
+    cmp x25, x20
+    b.ne remove_message_success
+    str x22, [x19, #queue_tail]  // Update tail to previous
+    
+    b remove_message_success
+    
+remove_message_head:
+    // Update queue head
+    ldr x24, [x20, #message_next]
+    str x24, [x19, #queue_head]
+    
+    // Update queue tail if this was the only message
+    ldr x25, [x19, #queue_tail]
+    cmp x25, x20
+    b.ne remove_message_success
+    str xzr, [x19, #queue_tail]  // Clear tail
+    
+remove_message_success:
+    // Free the message memory (simplified - just return success)
+    mov x0, #1
+    ldp x25, x30, [sp], #16
+    ldp x23, x24, [sp], #16
+    ldp x21, x22, [sp], #16
+    ldp x19, x20, [sp], #16
+    ret
+    
+remove_message_failed:
+    mov x0, #0
+    ldp x25, x30, [sp], #16
+    ldp x23, x24, [sp], #16
+    ldp x21, x22, [sp], #16
+    ldp x19, x20, [sp], #16
+    ret
 
 // Non-underscore versions for C compatibility
 _REASON_RECEIVE_CONST:

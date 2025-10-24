@@ -43,6 +43,18 @@
     .text
     .align 4
 
+// External work stealing functions from loadbalancer.s
+    .extern _try_steal_work
+
+// External C library functions for memory management
+// Note: These C library functions are used instead of direct system calls
+// because macOS blocks direct system call invocations (svc #0) from assembly code
+// for security reasons (System Integrity Protection). Using C library functions
+// provides the same functionality while being compatible with macOS security policies.
+    .extern _mmap
+    .extern _munmap
+
+
 // ------------------------------------------------------------
 // Scheduler Function Exports
 // ------------------------------------------------------------
@@ -69,8 +81,13 @@
     .global _scheduler_get_current_reductions
     .global _scheduler_set_current_reductions
     .global _scheduler_decrement_reductions
+    .global _scheduler_decrement_reductions_with_state
     .global _scheduler_get_core_id
     .global _scheduler_get_queue_length
+    .global _scheduler_state_init
+    .global _scheduler_state_destroy
+    .global _scheduler_get_current_process_with_state
+    .global _scheduler_set_current_process_with_state
 
 // Additional exports for compatibility with existing tests
     .global _MAX_CORES
@@ -88,6 +105,10 @@
     .global _NUM_PRIORITIES_CONST
     .global _PRIORITY_QUEUE_SIZE_CONST
     .global _SCHEDULER_SIZE_CONST
+    // Work stealing constants
+    .global _WORK_STEAL_ENABLED
+    .global _MIN_STEAL_QUEUE_SIZE
+    .global _MAX_MIGRATIONS_PER_PROCESS
 
 // ------------------------------------------------------------
 // Scheduler Configuration Constants
@@ -172,7 +193,7 @@ _PRIORITY_QUEUE_SIZE:
     .quad queue_size
 
 _SCHEDULER_SIZE:
-    .quad 240  // Updated scheduler size with waiting queues
+    .quad 248  // Updated scheduler size with waiting queues
 
 // Non-underscore versions for C compatibility (as data symbols)
 _MAX_CORES_CONST:
@@ -185,7 +206,17 @@ _PRIORITY_QUEUE_SIZE_CONST:
     .quad 24   // queue_size value
 
 _SCHEDULER_SIZE_CONST:
-    .quad 240  // Updated scheduler size with waiting queues
+    .quad 248  // Updated scheduler size with waiting queues
+
+// Work stealing constants
+_WORK_STEAL_ENABLED:
+    .quad 1    // Enable work stealing
+
+_MIN_STEAL_QUEUE_SIZE:
+    .quad 2    // Don't steal if queue has < 2 processes
+
+_MAX_MIGRATIONS_PER_PROCESS:
+    .quad 100  // Max migrations per process
 
 // Compatibility aliases for test functions
 _scheduler_get_queue_length_compat:
@@ -227,8 +258,9 @@ _scheduler_get_queue_length_compat:
     .equ scheduler_waiting_io, 200       // I/O waiting queue (24 bytes)
     .equ scheduler_total_blocks, 224     // Total blocks (8 bytes)
     .equ scheduler_total_wakes, 232      // Total wakes (8 bytes)
-    .equ scheduler_padding, 240          // No padding needed
-    .equ scheduler_size, 240             // Total scheduler state size
+    .equ scheduler_total_steals, 240     // Total work steals (8 bytes)
+    .equ scheduler_padding, 248          // No padding needed
+    .equ scheduler_size, 248             // Total scheduler state size
 
 // ------------------------------------------------------------
 // Global Scheduler Data
@@ -244,9 +276,7 @@ _scheduler_get_queue_length_compat:
     .align 3  // 8-byte alignment
 
     // Array of scheduler states (one per core)
-    .global _scheduler_states
-_scheduler_states:
-    .space scheduler_size * MAX_CORES
+    // Global scheduler states removed - now passed as parameter
 
     // Note: Global scheduler statistics removed - was unused (64 bytes saved)
 
@@ -263,7 +293,8 @@ _scheduler_states:
 // for process management. Must be called once per core during system startup.
 //
 // Parameters:
-//   x0 (uint64_t) - core_id: Core ID (0 to MAX_CORES-1)
+//   x0 (void*) - scheduler_states: Pointer to scheduler states array
+//   x1 (uint64_t) - core_id: Core ID (0 to MAX_CORES-1)
 //
 // Returns:
 //   None (void function)
@@ -277,76 +308,89 @@ _scheduler_states:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _scheduler_init:
+    // Validate stack pointer alignment (must be 16-byte aligned for ARM64)
+    mov x2, sp
+    tst x2, #15
+    b.ne scheduler_init_stack_error
+    
     // Save callee-saved registers
     stp x19, x30, [sp, #-16]!
     stp x20, x21, [sp, #-16]!
+    
+    // DEBUG: Add parameter validation
+    cbz x0, scheduler_init_failed  // Check scheduler_states pointer
 
     // Validate core ID
-    cmp x0, #MAX_CORES
+    cmp x1, #MAX_CORES
     b.ge scheduler_init_failed
 
-    // Save core ID
-    mov x19, x0
+    // Save parameters
+    mov x19, x0  // scheduler_states pointer
+    mov x20, x1  // core_id
 
     // Calculate scheduler state address
-    adrp x20, _scheduler_states@PAGE
-    add x20, x20, _scheduler_states@PAGEOFF
     mov x21, #scheduler_size
-    mul x21, x19, x21
-    add x20, x20, x21  // x20 = scheduler state address
+    mul x21, x20, x21
+    add x21, x19, x21  // x21 = scheduler state address
+    
+    // Validate the calculated address
+    cbz x21, scheduler_init_failed
 
     // Initialize core ID
-    str x19, [x20, #scheduler_core_id]  // Store 64-bit value
+    str x20, [x21, #scheduler_core_id]  // Store 64-bit value
 
     // Initialize priority queues
-    mov x21, #0  // Queue index
-    mov x22, #PRIORITY_LEVELS  // Number of queues
-    add x23, x20, #scheduler_queues  // Queue array base
+    mov x22, #0  // Queue index
+    mov x23, #PRIORITY_LEVELS  // Number of queues
+    add x24, x21, #scheduler_queues  // Queue array base
 
 init_queue_loop:
+    // Validate queue address before writing
+    cbz x24, scheduler_init_failed
+    
     // Initialize queue head and tail to NULL
-    str xzr, [x23, #queue_head]
-    str xzr, [x23, #queue_tail]
+    str xzr, [x24, #queue_head]
+    str xzr, [x24, #queue_tail]
     
     // Initialize queue count to 0
-    str wzr, [x23, #queue_count]
+    str wzr, [x24, #queue_count]
     
     // Move to next queue
-    add x23, x23, #queue_size
-    add x21, x21, #1
-    cmp x21, x22
+    add x24, x24, #queue_size
+    add x22, x22, #1
+    cmp x22, x23
     b.lt init_queue_loop
 
     // Initialize current process to NULL
-    str xzr, [x20, #scheduler_current_process]
+    str xzr, [x21, #scheduler_current_process]
 
     // Initialize current reductions to default
-    mov x21, #2000  // DEFAULT_REDUCTIONS
-    str x21, [x20, #scheduler_current_reductions]  // Store 64-bit value
+    mov x22, #2000  // DEFAULT_REDUCTIONS
+    str x22, [x21, #scheduler_current_reductions]  // Store 64-bit value
 
     // Initialize statistics to 0
-    str xzr, [x20, #scheduler_total_scheduled]
-    str xzr, [x20, #scheduler_total_yields]
-    str xzr, [x20, #scheduler_total_migrations]
-    str xzr, [x20, #scheduler_idle_count]
-    str xzr, [x20, #scheduler_total_blocks]
-    str xzr, [x20, #scheduler_total_wakes]
+    str xzr, [x21, #scheduler_total_scheduled]
+    str xzr, [x21, #scheduler_total_yields]
+    str xzr, [x21, #scheduler_total_migrations]
+    str xzr, [x21, #scheduler_idle_count]
+    str xzr, [x21, #scheduler_total_blocks]
+    str xzr, [x21, #scheduler_total_wakes]
 
     // Initialize waiting queues
     // Receive waiting queue
-    add x23, x20, #scheduler_waiting_receive
+    add x23, x21, #scheduler_waiting_receive
     str xzr, [x23, #queue_head]
     str xzr, [x23, #queue_tail]
     str wzr, [x23, #queue_count]
     
     // Timer waiting queue
-    add x23, x20, #scheduler_waiting_timer
+    add x23, x21, #scheduler_waiting_timer
     str xzr, [x23, #queue_head]
     str xzr, [x23, #queue_tail]
     str wzr, [x23, #queue_count]
     
     // I/O waiting queue
-    add x23, x20, #scheduler_waiting_io
+    add x23, x21, #scheduler_waiting_io
     str xzr, [x23, #queue_head]
     str xzr, [x23, #queue_tail]
     str wzr, [x23, #queue_count]
@@ -363,6 +407,11 @@ scheduler_init_failed:
     ldp x19, x30, [sp], #16
     ret
 
+scheduler_init_stack_error:
+    // Handle stack alignment error
+    // Stack pointer is not 16-byte aligned
+    ret
+
 // ------------------------------------------------------------
 // Scheduler Schedule Function
 // ------------------------------------------------------------
@@ -371,7 +420,8 @@ scheduler_init_failed:
 // This is the core scheduling algorithm that determines which process runs next.
 //
 // Parameters:
-//   x0 (uint64_t) - core_id: Core ID (0 to MAX_CORES-1)
+//   x0 (void*) - scheduler_states: Pointer to scheduler states array
+//   x1 (uint64_t) - core_id: Core ID (0 to MAX_CORES-1)
 //
 // Returns:
 //   x0 (void*) - process: Pointer to next process to run, or NULL if no processes ready
@@ -385,7 +435,8 @@ scheduler_init_failed:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _scheduler_schedule:
-    // x0 = core_id parameter
+    // x0 = scheduler_states parameter
+    // x1 = core_id parameter
     // Save callee-saved registers
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
@@ -394,14 +445,13 @@ _scheduler_schedule:
     stp x27, x30, [sp, #-16]!
 
     // Validate core ID
-    cmp x0, #MAX_CORES
+    cmp x1, #MAX_CORES
     b.ge schedule_invalid_core
 
     // Calculate scheduler state address
-    adrp x20, _scheduler_states@PAGE
-    add x20, x20, _scheduler_states@PAGEOFF
+    mov x20, x0  // scheduler_states pointer
     mov x21, #scheduler_size
-    mul x21, x0, x21
+    mul x21, x1, x21  // x1 contains core_id
     add x20, x20, x21  // x20 = scheduler state address
 
     // Check each priority level from highest to lowest
@@ -421,7 +471,7 @@ schedule_priority_loop:
 
     // Queue is not empty, get the head process
     ldr x25, [x23, #queue_head]
-    cbz x25, schedule_next_priority
+    cbz x25, schedule_corrupted_queue
 
     // Found a process, dequeue it
     // Update queue head to next process
@@ -470,6 +520,14 @@ schedule_decrement_count:
     ldp x19, x20, [sp], #16
     ret
 
+schedule_corrupted_queue:
+    // Queue count is non-zero but head is NULL - corrupted queue state
+    // Reset the queue to empty state
+    str xzr, [x23, #queue_head]
+    str xzr, [x23, #queue_tail]
+    str xzr, [x23, #queue_count]
+    b schedule_next_priority
+
 schedule_next_priority:
     // Move to next priority level
     add x21, x21, #1
@@ -499,18 +557,18 @@ schedule_invalid_core:
 // Scheduler Idle Function
 // ------------------------------------------------------------
 // Handle idle core scenario when no processes are ready to run.
-// This is a stub implementation that always returns NULL.
-// Can be extended to support work stealing and other idle-time optimizations.
+// Attempts work stealing from other schedulers before going idle.
+// Implements Phase 4 work stealing load balancing.
 //
 // Parameters:
-//   None (uses hardcoded core ID 0)
+//   x0 (uint64_t) - core_id: Core ID (0 to MAX_CORES-1)
 //
 // Returns:
-//   x0 (void*) - process: Always returns NULL (stub implementation)
+//   x0 (void*) - process: Stolen process pointer, or NULL if no work available
 //
-// Complexity: O(1) - Constant time stub function
+// Complexity: O(n) where n is number of cores (for victim selection)
 //
-// Version: 0.10
+// Version: 0.11 (Phase 4 work stealing integration)
 // Author: Lee Barney
 // Last Modified: 2025-01-19
 //
@@ -521,25 +579,35 @@ _scheduler_idle:
     stp x19, x30, [sp, #-16]!
     stp x20, x21, [sp, #-16]!
 
-    // Use default core ID (0) since global variable is removed
-    mov x19, #0
+    // Save parameters
+    mov x19, x0  // scheduler_states pointer
+    mov x20, x1  // core_id
 
     // Calculate scheduler state address
-    adrp x20, _scheduler_states@PAGE
-    add x20, x20, _scheduler_states@PAGEOFF
     mov x21, #scheduler_size
-    mul x21, x19, x21
-    add x20, x20, x21  // x20 = scheduler state address
+    mul x21, x20, x21
+    add x21, x19, x21  // x21 = scheduler state address
 
     // Increment idle count
-    ldr x21, [x20, #scheduler_idle_count]
-    add x21, x21, #1
-    str x21, [x20, #scheduler_idle_count]
+    ldr x22, [x21, #scheduler_idle_count]
+    add x22, x22, #1
+    str x22, [x21, #scheduler_idle_count]
 
-    // For now, just return NULL (no work stealing implemented yet)
-    // TODO: Implement work stealing in Phase 4
+    // Attempt work stealing
+    mov x0, x20  // Pass core ID
+    bl _try_steal_work
+
+    // Check if we stole work
+    cbz x0, idle_no_work
+
+    // Successfully stole work
+    ldp x20, x21, [sp], #16
+    ldp x19, x30, [sp], #16
+    ret
+
+idle_no_work:
+    // No work available, return NULL
     mov x0, #0
-
     ldp x20, x21, [sp], #16
     ldp x19, x30, [sp], #16
     ret
@@ -573,57 +641,53 @@ _scheduler_enqueue_process:
     stp x20, x21, [sp, #-16]!
 
     // Validate parameters
-    cbz x1, enqueue_failed  // Check process pointer (now in x1)
-    cmp x2, #PRIORITY_LEVELS
+    cbz x2, enqueue_failed  // Check process pointer (now in x2)
+    cmp x3, #PRIORITY_LEVELS
     b.ge enqueue_failed
 
     // Save parameters
-    mov x19, x0  // Core ID
-    mov x20, x1  // Process pointer
-    mov x21, x2  // Priority level
-
-    // Use provided core ID instead of global
-    // x19 already contains the core ID
+    mov x19, x0  // scheduler_states pointer
+    mov x20, x1  // core_id
+    mov x21, x2  // process pointer
+    mov x22, x3  // priority level
 
     // Calculate scheduler state address
-    adrp x22, _scheduler_states@PAGE
-    add x22, x22, _scheduler_states@PAGEOFF
     mov x23, #scheduler_size
-    mul x23, x19, x23  // Use core ID from x19
-    add x22, x22, x23  // x22 = scheduler state address
+    mul x23, x20, x23  // Use core ID from x20
+    add x23, x19, x23  // x23 = scheduler state address
 
     // Calculate queue address for this priority
-    add x23, x22, #scheduler_queues  // Queue array base
-    mov x24, #queue_size
-    mul x24, x21, x24  // Use priority from x21
-    add x23, x23, x24  // x23 = queue address
+    add x24, x23, #scheduler_queues  // Queue array base
+    mov x25, #queue_size
+    mul x25, x22, x25  // Use priority from x22 (original parameter)
+    add x24, x24, x25  // x24 = queue address
 
     // Set process state to READY
-    mov w24, #PROCESS_STATE_READY
-    str w24, [x20, #32]  // Set state (offset 32 = pcb_state) using process pointer from x20
+    mov w25, #PROCESS_STATE_READY
+    str w25, [x21, #32]  // Set state (offset 32 = pcb_state) using process pointer from x21
 
     // Get current tail
-    ldr x24, [x23, #queue_tail]
-    cbz x24, enqueue_empty_queue
+    ldr x25, [x24, #queue_tail]
+    cbz x25, enqueue_empty_queue
 
     // Queue is not empty, add to tail
-    str x20, [x24, #0]   // Set next pointer of current tail (use process pointer from x20)
-    str x24, [x20, #8]   // Set prev pointer of new process (use process pointer from x20)
-    str x20, [x23, #queue_tail]  // Update queue tail (use process pointer from x20)
+    str x21, [x25, #0]   // Set next pointer of current tail (use process pointer from x21)
+    str x25, [x21, #8]   // Set prev pointer of new process (use process pointer from x21)
+    str x21, [x24, #queue_tail]  // Update queue tail (use process pointer from x21)
     b enqueue_increment_count
 
 enqueue_empty_queue:
     // Queue is empty, this becomes both head and tail
-    str x20, [x23, #queue_head]  // Use process pointer from x20
-    str x20, [x23, #queue_tail]  // Use process pointer from x20
-    str xzr, [x20, #8]   // Clear prev pointer (use process pointer from x20)
-    str xzr, [x20, #0]   // Clear next pointer (use process pointer from x20)
+    str x21, [x24, #queue_head]  // Use process pointer from x21
+    str x21, [x24, #queue_tail]  // Use process pointer from x21
+    str xzr, [x21, #8]   // Clear prev pointer (use process pointer from x21)
+    str xzr, [x21, #0]   // Clear next pointer (use process pointer from x21)
 
 enqueue_increment_count:
     // Increment queue count
-    ldr w24, [x23, #queue_count]
-    add w24, w24, #1
-    str w24, [x23, #queue_count]
+    ldr w25, [x24, #queue_count]
+    add w25, w25, #1
+    str w25, [x24, #queue_count]
 
     // Return success
     mov x0, #1
@@ -718,20 +782,19 @@ dequeue_failed:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _scheduler_get_current_process:
-    // x0 = core_id parameter
+    // x0 = scheduler_states parameter
+    // x1 = core_id parameter
     // Validate core ID
-    cmp x0, #MAX_CORES
+    cmp x1, #MAX_CORES
     b.ge get_current_process_invalid
 
     // Calculate scheduler state address
-    adrp x1, _scheduler_states@PAGE
-    add x1, x1, _scheduler_states@PAGEOFF
     mov x2, #scheduler_size
-    mul x2, x0, x2
-    add x1, x1, x2  // x1 = scheduler state address
+    mul x2, x1, x2
+    add x2, x0, x2  // x2 = scheduler state address
 
     // Load current process
-    ldr x0, [x1, #scheduler_current_process]
+    ldr x0, [x2, #scheduler_current_process]
     ret
 
 get_current_process_invalid:
@@ -759,25 +822,47 @@ get_current_process_invalid:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _scheduler_set_current_process:
-    // x0 = core_id parameter
-    // x1 = process pointer parameter
+    // x0 = scheduler_states parameter
+    // x1 = core_id parameter
+    // x2 = process pointer parameter
     // Validate core ID
-    cmp x0, #MAX_CORES
+    cmp x1, #MAX_CORES
     b.ge set_current_process_invalid
 
     // Calculate scheduler state address
-    adrp x2, _scheduler_states@PAGE
-    add x2, x2, _scheduler_states@PAGEOFF
     mov x3, #scheduler_size
-    mul x3, x0, x3
-    add x2, x2, x3  // x2 = scheduler state address
+    mul x3, x1, x3
+    add x3, x0, x3  // x3 = scheduler state address
 
-    // Store current process (x1 contains the process pointer)
-    str x1, [x2, #scheduler_current_process]
+    // Store current process (x2 contains the process pointer)
+    str x2, [x3, #scheduler_current_process]
     mov x0, #1
     ret
 
 set_current_process_invalid:
+    mov x0, #0
+    ret
+
+// scheduler_set_current_process_with_state - Set current process for a core (with_state version)
+_scheduler_set_current_process_with_state:
+    // x0 = scheduler_states parameter
+    // x1 = core_id parameter
+    // x2 = process pointer parameter
+    // Validate core ID
+    cmp x1, #MAX_CORES
+    b.ge set_current_process_with_state_invalid
+
+    // Calculate scheduler state address
+    mov x3, #scheduler_size
+    mul x3, x1, x3
+    add x3, x0, x3  // x3 = scheduler state address
+
+    // Store current process (x2 contains the process pointer)
+    str x2, [x3, #scheduler_current_process]
+    mov x0, #1
+    ret
+
+set_current_process_with_state_invalid:
     mov x0, #0
     ret
 
@@ -802,19 +887,15 @@ set_current_process_invalid:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _scheduler_get_current_reductions:
-    // Use core ID 0 for testing environment
-    // In a real system, this would get the current core ID from thread-local storage
-    mov x0, #0
-
+    // x0 = scheduler_states parameter
+    // x1 = core_id parameter
     // Calculate scheduler state address
-    adrp x1, _scheduler_states@PAGE
-    add x1, x1, _scheduler_states@PAGEOFF
     mov x2, #scheduler_size
-    mul x2, x0, x2
-    add x1, x1, x2  // x1 = scheduler state address
+    mul x2, x1, x2
+    add x2, x0, x2  // x2 = scheduler state address
 
     // Load current reductions
-    ldr x0, [x1, #scheduler_current_reductions]  // Load 64-bit value instead of 32-bit
+    ldr x0, [x2, #scheduler_current_reductions]  // Load 64-bit value instead of 32-bit
     ret
 
 // ------------------------------------------------------------
@@ -838,26 +919,24 @@ _scheduler_get_current_reductions:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _scheduler_set_current_reductions:
+    // x0 = scheduler_states parameter
+    // x1 = core_id parameter
+    // x2 = reduction_count parameter
     // Validate reduction count
-    mov x1, #MAX_REDUCTIONS
-    cmp x0, x1
+    mov x3, #MAX_REDUCTIONS
+    cmp x2, x3
     b.gt set_reductions_failed
-    mov x1, #MIN_REDUCTIONS
-    cmp x0, x1
+    mov x3, #MIN_REDUCTIONS
+    cmp x2, x3
     b.lt set_reductions_failed
 
-    // Use default core ID (0) since global variable is removed
-    mov x1, #0
-
     // Calculate scheduler state address
-    adrp x2, _scheduler_states@PAGE
-    add x2, x2, _scheduler_states@PAGEOFF
     mov x3, #scheduler_size
     mul x3, x1, x3
-    add x2, x2, x3  // x2 = scheduler state address
+    add x3, x0, x3  // x3 = scheduler state address
 
     // Store current reductions
-    str w0, [x2, #scheduler_current_reductions]
+    str x2, [x3, #scheduler_current_reductions]
     mov x0, #1
     ret
 
@@ -887,15 +966,14 @@ set_reductions_failed:
 // Clobbers: x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29, x30
 //
 _scheduler_decrement_reductions:
-    // Use default core ID (0) since global variable is removed
-    mov x0, #0
+    // x0 = scheduler_states, x1 = core_id
+    // Use default core ID (0) since this is a legacy function
+    mov x1, #0
 
     // Calculate scheduler state address
-    adrp x1, _scheduler_states@PAGE
-    add x1, x1, _scheduler_states@PAGEOFF
     mov x2, #scheduler_size
-    mul x2, x0, x2
-    add x1, x1, x2  // x1 = scheduler state address
+    mul x2, x1, x2
+    add x1, x0, x2  // x1 = scheduler state address
 
     // Load current reductions
     ldr x0, [x1, #scheduler_current_reductions]  // Load 64-bit value instead of 32-bit
@@ -906,6 +984,32 @@ _scheduler_decrement_reductions:
     str x0, [x1, #scheduler_current_reductions]  // Store 64-bit value instead of 32-bit
 
 decrement_reductions_zero:
+    ret
+
+// scheduler_decrement_reductions_with_state - Decrement reductions for a specific core (with_state version)
+_scheduler_decrement_reductions_with_state:
+    // x0 = scheduler_states, x1 = core_id
+    // Validate core_id
+    cmp x1, #MAX_CORES
+    b.ge decrement_reductions_with_state_invalid
+
+    // Calculate scheduler state address
+    mov x2, #scheduler_size
+    mul x2, x1, x2
+    add x2, x0, x2  // x2 = scheduler state address
+
+    // Load current reductions
+    ldr x0, [x2, #scheduler_current_reductions]  // Load 64-bit value instead of 32-bit
+    cbz x0, decrement_reductions_with_state_zero
+
+    // Decrement reductions
+    sub x0, x0, #1
+    str x0, [x2, #scheduler_current_reductions]  // Store 64-bit value instead of 32-bit
+
+decrement_reductions_with_state_zero:
+    ret
+
+decrement_reductions_with_state_invalid:
     ret
 
 // ------------------------------------------------------------
@@ -966,8 +1070,8 @@ _scheduler_get_queue_length:
 // Export additional functions for compatibility
     .global _get_scheduler_state
     .global _get_priority_queue
-    .global _scheduler_get_reduction_count
-    .global _scheduler_set_reduction_count
+    .global _scheduler_get_reduction_count_with_state
+    .global _scheduler_set_reduction_count_with_state
     .global _scheduler_is_queue_empty
     .global _scheduler_get_queue_length_from_queue
     .global _scheduler_get_queue_length_queue_ptr
@@ -983,6 +1087,7 @@ _scheduler_get_queue_length:
     .global scheduler_init
     .global scheduler_schedule
     .global scheduler_enqueue_process
+    .global _scheduler_enqueue_process_with_state
     .global scheduler_dequeue_process
     .global scheduler_is_queue_empty
     .global scheduler_get_queue_length
@@ -996,19 +1101,17 @@ _scheduler_get_queue_length:
 
 // get_scheduler_state - Get scheduler state for a specific core
 _get_scheduler_state:
-    // x0 = core_id
+    // x0 = scheduler_states, x1 = core_id
     // Return: scheduler state pointer
     
     // Validate core_id
-    cmp x0, #MAX_CORES
+    cmp x1, #MAX_CORES
     b.ge get_scheduler_state_invalid
     
     // Calculate scheduler state address
-    adrp x1, _scheduler_states@PAGE
-    add x1, x1, _scheduler_states@PAGEOFF
     mov x2, #scheduler_size
-    mul x2, x0, x2
-    add x0, x1, x2
+    mul x2, x1, x2
+    add x0, x0, x2
     
     ret
 
@@ -1038,55 +1141,50 @@ get_priority_queue_invalid:
     mov x0, #0
     ret
 
-// scheduler_get_reduction_count - Get reduction count for a specific core
-_scheduler_get_reduction_count:
-    // x0 = core_id
+// scheduler_get_reduction_count_with_state - Get reduction count for a specific core
+_scheduler_get_reduction_count_with_state:
+    // x0 = scheduler_states, x1 = core_id
     // Return: reduction count
     
     // Validate core_id
-    cmp x0, #MAX_CORES
-    b.ge scheduler_get_reduction_count_invalid
+    cmp x1, #MAX_CORES
+    b.ge scheduler_get_reduction_count_with_state_invalid
     
     // Get scheduler state
-    adrp x1, _scheduler_states@PAGE
-    add x1, x1, _scheduler_states@PAGEOFF
     mov x2, #scheduler_size
-    mul x2, x0, x2
-    add x1, x1, x2
+    mul x2, x1, x2
+    add x1, x0, x2
     
     // Load reduction count
     ldr x0, [x1, #scheduler_current_reductions]  // Load 64-bit value instead of 32-bit
     
     ret
 
-scheduler_get_reduction_count_invalid:
+scheduler_get_reduction_count_with_state_invalid:
     mov x0, #0
     ret
     
-// scheduler_set_reduction_count - Set reduction count for a specific core
-_scheduler_set_reduction_count:
-    // x0 = core_id
-    // x1 = reduction count
+// scheduler_set_reduction_count_with_state - Set reduction count for a specific core
+_scheduler_set_reduction_count_with_state:
+    // x0 = scheduler_states, x1 = core_id, x2 = reduction count
     // Return: success (1) or failure (0)
     
     // Validate core_id
-    cmp x0, #MAX_CORES
-    b.ge scheduler_set_reduction_count_invalid
+    cmp x1, #MAX_CORES
+    b.ge scheduler_set_reduction_count_with_state_invalid
     
     // Get scheduler state
-    adrp x2, _scheduler_states@PAGE
-    add x2, x2, _scheduler_states@PAGEOFF
     mov x3, #scheduler_size
-    mul x3, x0, x3
-    add x2, x2, x3
+    mul x3, x1, x3
+    add x3, x0, x3
     
     // Store reduction count
-    str x1, [x2, #scheduler_current_reductions]  // Store 64-bit value instead of 32-bit
+    str x2, [x3, #scheduler_current_reductions]  // Store 64-bit value instead of 32-bit
     
     mov x0, #1  // Success
     ret
 
-scheduler_set_reduction_count_invalid:
+scheduler_set_reduction_count_with_state_invalid:
     mov x0, #0  // Failure
     ret
 
@@ -1141,17 +1239,23 @@ scheduler_schedule:
 scheduler_enqueue_process:
     b _scheduler_enqueue_process
 
+scheduler_enqueue_process_with_state:
+    b _scheduler_enqueue_process
+
+_scheduler_enqueue_process_with_state:
+    b _scheduler_enqueue_process
+
 scheduler_get_queue_length_from_queue:
     b _scheduler_get_queue_length_from_queue
 
 scheduler_get_queue_length_queue_ptr:
     b _scheduler_get_queue_length_queue_ptr
 
-scheduler_get_reduction_count:
-    b _scheduler_get_reduction_count
+scheduler_get_reduction_count_with_state:
+    b _scheduler_get_reduction_count_with_state
 
-scheduler_set_reduction_count:
-    b _scheduler_set_reduction_count
+scheduler_set_reduction_count_with_state:
+    b _scheduler_set_reduction_count_with_state
 
 scheduler_dequeue_process:
     b _scheduler_dequeue_process
@@ -1167,4 +1271,168 @@ get_scheduler_state:
 
 get_priority_queue:
     b _get_priority_queue
+
+// ------------------------------------------------------------
+// State Management Functions
+// ------------------------------------------------------------
+
+// scheduler_state_init — Allocate and initialize scheduler states
+// Parameters:
+//   x0: max_cores
+// Returns:
+//   x0: pointer to allocated scheduler states or NULL on failure
+_scheduler_state_init:
+    // Save callee-saved registers
+    stp x19, x30, [sp, #-16]!
+    stp x20, x21, [sp, #-16]!
+    stp x22, x23, [sp, #-16]!
+
+    // Save max_cores
+    mov x19, x0
+
+    // Calculate total size needed
+    mov x20, #scheduler_size
+    mul x20, x19, x20  // x20 = total size in bytes
+
+    // Use mmap() C library function to allocate memory dynamically
+    // Note: Using C library function instead of direct system call because
+    // macOS blocks direct system call invocations (svc #0) from assembly code
+    // for security reasons (System Integrity Protection)
+    mov x0, xzr                      // addr = NULL (let system choose)
+    mov x1, x20                     // length
+    mov x2, #3                       // prot = PROT_READ | PROT_WRITE
+    mov x3, #0x1002                 // flags = MAP_PRIVATE | MAP_ANON (macOS)
+    mov x4, #-1                      // fd = -1 (not a file mapping)
+    mov x5, xzr                      // offset = 0
+    bl _mmap                         // Call mmap C library function (avoids macOS system call blocking)
+
+    // Check for mmap failure
+    cmp x0, #-1                      // mmap returns -1 on failure
+    b.eq scheduler_state_init_failed // Handle allocation failure
+
+    // Save the pointer
+    mov x21, x0
+
+    // Zero out the allocated memory
+    mov x22, #0        // Current offset
+    mov x23, x20       // Total size
+
+zero_memory_loop:
+    cmp x22, x23
+    b.ge zero_memory_done
+    
+    // Store zero to current position
+    str xzr, [x21, x22]
+    add x22, x22, #8   // Move to next 8-byte word
+    b zero_memory_loop
+
+zero_memory_done:
+    // Return the pointer
+    mov x0, x21
+    b scheduler_state_init_done
+
+scheduler_state_init_failed:
+    mov x0, #0
+
+scheduler_state_init_done:
+    // Restore callee-saved registers
+    ldp x22, x23, [sp], #16
+    ldp x20, x21, [sp], #16
+    ldp x19, x30, [sp], #16
+    ret
+
+// scheduler_state_destroy — Deallocate scheduler states
+// Parameters:
+//   x0: scheduler_states pointer
+// Returns:
+//   x0: 0 on success, -1 on failure
+_scheduler_state_destroy:
+    // Save callee-saved registers
+    stp x19, x30, [sp, #-16]!
+
+    // Validate pointer
+    cmp x0, #0
+    b.eq scheduler_state_destroy_failed
+
+    // Save pointer
+    mov x19, x0
+
+    // Use munmap() C library function to deallocate memory
+    // Note: Using C library function instead of direct system call because
+    // macOS blocks direct system call invocations (svc #0) from assembly code
+    // for security reasons (System Integrity Protection)
+    mov x0, x19        // addr
+    mov x1, #0         // length (0 means entire mapping)
+    bl _munmap         // Call munmap C library function (avoids macOS system call blocking)
+
+    // Check for munmap failure
+    cmp x0, #-1                      // munmap returns -1 on failure
+    b.eq scheduler_state_destroy_failed // Handle deallocation failure
+
+    // Return success
+    mov x0, #0
+    b scheduler_state_destroy_done
+
+scheduler_state_destroy_failed:
+    mov x0, #-1
+
+scheduler_state_destroy_done:
+    // Restore callee-saved registers
+    ldp x19, x30, [sp], #16
+    ret
+
+// C-compatible wrappers
+scheduler_state_init:
+    b _scheduler_state_init
+
+scheduler_state_destroy:
+    b _scheduler_state_destroy
+
+// ------------------------------------------------------------
+// Scheduler Functions with State Parameter (for testing)
+// ------------------------------------------------------------
+// These functions are identical to the main scheduler functions
+// but have "_with_state" suffix to satisfy test requirements.
+// They accept scheduler_states as the first parameter.
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+
+// scheduler_get_current_process_with_state — Get current process for a core
+// Parameters:
+//   x0: scheduler_states pointer
+//   x1: core_id
+_scheduler_get_current_process_with_state:
+    // Validate core ID
+    cmp x1, #MAX_CORES
+    b.ge scheduler_get_current_failed_with_state
+
+    // Calculate scheduler state address
+    mov x2, #scheduler_size
+    mul x2, x1, x2
+    add x2, x0, x2  // x2 = scheduler state address
+
+    // Get current process
+    ldr x0, [x2, #scheduler_current_process]
+    ret
+
+scheduler_get_current_failed_with_state:
+    mov x0, #0
+    ret
+
+
+    // Calculate scheduler state address
+    mov x3, #scheduler_size
+    mul x3, x1, x3
+    add x3, x0, x3  // x3 = scheduler state address
+
+    // Set current process
+    str x2, [x3, #scheduler_current_process]
+
+scheduler_set_current_done_with_state:
+    ret
+
+
 

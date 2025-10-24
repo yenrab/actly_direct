@@ -90,3 +90,22 @@
     .equ ALIGN_16, 16                  // 16-byte alignment
     .equ ALIGN_64, 64                  // 64-byte alignment
     .equ ALIGN_128, 128                // 128-byte alignment
+
+    // Work stealing configuration
+    .equ WORK_STEAL_ENABLED, 1           // Enable work stealing
+    .equ MIN_STEAL_QUEUE_SIZE, 2         // Don't steal if queue has < 2 processes
+    .equ MAX_MIGRATIONS_PER_PROCESS, 100 // Max migrations per process
+    .equ STEAL_COOLDOWN_CYCLES, 10000    // Cycles between steals from same victim
+    .equ LOAD_IMBALANCE_THRESHOLD, 2     // Steal if load difference > 2
+    .equ STEAL_RETRY_LIMIT, 3            // Max retry attempts per steal
+    .equ WS_DEQUE_SIZE_BYTES, 64         // Work stealing deque structure size
+    
+    // Work stealing permission constants
+    .equ MAX_MIGRATIONS, 10              // Maximum migrations per process
+    .equ MIGRATION_COOLDOWN_TICKS, 1000000 // ~1ms on typical ARM timer
+
+    // Victim selection strategy
+    .equ VICTIM_STRATEGY_RANDOM, 0       // Random victim selection
+    .equ VICTIM_STRATEGY_LOAD, 1         // Load-based victim selection
+    .equ VICTIM_STRATEGY_LOCALITY, 2     // Locality-aware selection
+    .equ DEFAULT_VICTIM_STRATEGY, 1      // Use load-based by default

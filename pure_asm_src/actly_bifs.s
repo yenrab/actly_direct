@@ -63,7 +63,7 @@
 .equ scheduler_total_yields, 128
 .equ scheduler_queues, 8
 .equ queue_count, 16
-.equ scheduler_size, 240
+    .equ scheduler_size, 248
 .equ queue_size, 24
 
 // Define PCB offsets (matching process.s)
@@ -83,7 +83,6 @@
 .equ DEFAULT_HEAP_SIZE, 4096
 
 // External function declarations (macOS linker requirements)
-.extern _scheduler_states
 .extern _scheduler_get_current_process
 .extern _scheduler_decrement_reductions
 .extern _scheduler_enqueue_process
@@ -122,7 +121,8 @@
 // erlang:yield/0 behavior with reduction counting.
 //
 // Parameters:
-//   x0 (uint64_t) - core_id: Core ID (0 to MAX_CORES-1)
+//   x0 (void*) - scheduler_states: Pointer to scheduler states array
+//   x1 (uint64_t) - core_id: Core ID (0 to MAX_CORES-1)
 //
 // Returns:
 //   x0 (int) - success: 1 on success, 0 on failure
@@ -169,7 +169,7 @@ _actly_yield:
     // Yield the process unconditionally
     mov x0, x19  // core_id
     mov x1, x20  // pcb
-    bl _process_yield
+    bl _process_yield_with_state
 
     mov x0, #1  // Return 1 = success
     ldp x25, x30, [sp], #16
@@ -496,31 +496,30 @@ _actly_bif_trap_check:
     stp x23, x24, [sp, #-16]!
     stp x25, x30, [sp], #16
 
-    // x0 = core_id, x1 = reduction_cost
-    mov x19, x0  // Save core_id
-    mov x20, x1  // Save reduction_cost
+    // x0 = scheduler_states, x1 = core_id, x2 = reduction_cost
+    mov x19, x0  // Save scheduler_states pointer
+    mov x20, x1  // Save core_id
+    mov x21, x2  // Save reduction_cost
 
     // Validate core ID
-    cmp x19, #MAX_CORES
+    cmp x20, #MAX_CORES
     b.ge bif_trap_invalid_core
 
     // Get scheduler state
-    adrp x21, _scheduler_states@PAGE
-    add x21, x21, _scheduler_states@PAGEOFF
     mov x22, #scheduler_size
-    mul x22, x19, x22
-    add x21, x21, x22  // x21 = scheduler state address
+    mul x22, x20, x22
+    add x22, x19, x22  // x22 = scheduler state address
 
     // Get current reduction count
-    ldr x23, [x21, #scheduler_current_reductions]
+    ldr x23, [x22, #scheduler_current_reductions]
 
     // Check if we have enough reductions
-    cmp x23, x20
+    cmp x23, x21
     b.lt bif_trap_insufficient_reductions
 
     // Decrement reductions by cost
-    sub x23, x23, x20
-    str x23, [x21, #scheduler_current_reductions]
+    sub x23, x23, x21
+    str x23, [x22, #scheduler_current_reductions]
 
     // Check if reductions exhausted
     cbz x23, bif_trap_preempt
