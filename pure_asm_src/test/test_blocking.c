@@ -37,20 +37,10 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include "scheduler_functions.h"
 
-// External assembly functions
-extern void* process_block(uint64_t core_id, void* pcb, uint64_t reason);
-extern int process_wake(uint64_t core_id, void* pcb);
-extern void* process_block_on_receive(uint64_t core_id, void* pcb, uint64_t pattern);
-extern int process_block_on_timer(uint64_t core_id, void* pcb, uint64_t timeout_ticks);
-extern int process_block_on_io(uint64_t core_id, void* pcb, uint64_t io_descriptor);
+// External assembly functions (now included from scheduler_functions.h)
 extern uint64_t process_check_timer_wakeups(uint64_t core_id);
-
-// External scheduler functions
-extern void scheduler_init(uint64_t core_id);
-extern void* scheduler_get_current_process(uint64_t core_id);
-extern void scheduler_set_current_process(uint64_t core_id, void* process);
-extern int scheduler_enqueue_process(uint64_t core_id, void* process, uint64_t priority);
 
 // External process functions
 extern void* process_create(uint64_t entry_point, uint64_t priority, uint64_t stack_size, uint64_t heap_size);
@@ -58,6 +48,9 @@ extern void process_destroy(void* pcb);
 extern uint64_t process_get_pid(void* pcb);
 extern uint64_t process_get_priority(void* pcb);
 extern uint64_t process_get_state(void* pcb);
+
+// Forward declarations for test functions
+static void test_message_pattern_matching();
 extern void process_set_state(void* pcb, uint64_t state);
 
 // External test framework functions
@@ -69,10 +62,6 @@ extern void test_assert_zero(uint64_t value, const char* test_name);
 extern void test_assert_not_zero(uint64_t value, const char* test_name);
 
 // External constants
-extern const uint64_t PROCESS_STATE_READY;
-extern const uint64_t PROCESS_STATE_RUNNING;
-extern const uint64_t PROCESS_STATE_WAITING;
-extern const uint64_t PRIORITY_NORMAL;
 extern const uint64_t REASON_RECEIVE;
 extern const uint64_t REASON_TIMER;
 extern const uint64_t REASON_IO;
@@ -139,113 +128,271 @@ void* create_blocking_test_process(uint64_t pid, uint64_t priority, uint64_t sta
 // ------------------------------------------------------------
 // Test Process Block and Wake Functions
 // ------------------------------------------------------------
-void test_process_block_and_wake(void) {
+void test_process_block_and_wake() {
     printf("\n--- Testing process_block and process_wake (Generic Blocking) ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    printf("DEBUG: test_process_block_and_wake() starting\n");
+    fflush(stdout);
+    
+    // Create single-core scheduler state
+    printf("DEBUG: About to call scheduler_state_init()\n");
+    fflush(stdout);
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    printf("DEBUG: scheduler_state_init() completed successfully\n");
+    fflush(stdout);
+    
+    // Initialize scheduler for core 0
+    printf("DEBUG: About to call scheduler_init()\n");
+    fflush(stdout);
+    scheduler_init(scheduler_state, 0);
+    printf("DEBUG: scheduler_init() completed successfully\n");
+    fflush(stdout);
     
     // Create test process
+    printf("DEBUG: About to call create_blocking_test_process()\n");
+    fflush(stdout);
     void* pcb = create_blocking_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
+    printf("DEBUG: create_blocking_test_process() completed\n");
+    fflush(stdout);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    printf("DEBUG: About to call scheduler_set_current_process_with_state()\n");
+    fflush(stdout);
+    scheduler_set_current_process_with_state(scheduler_state, 0, pcb);
+    printf("DEBUG: scheduler_set_current_process_with_state() completed successfully\n");
+    fflush(stdout);
     
     // Test blocking with receive reason
-    void* next_process = process_block(0, pcb, REASON_RECEIVE);
+    printf("DEBUG: About to call process_block()\n");
+    fflush(stdout);
+    void* next_process = process_block(scheduler_state, 0, pcb, REASON_RECEIVE);
+    printf("DEBUG: process_block() completed successfully\n");
+    fflush(stdout);
+    
+    printf("DEBUG: About to call test_assert_zero for next_process\n");
+    fflush(stdout);
     test_assert_zero((uint64_t)next_process, "block_no_next_process");
+    printf("DEBUG: test_assert_zero for next_process completed\n");
+    fflush(stdout);
     
     // Verify process state changed to WAITING
+    printf("DEBUG: About to call process_get_state()\n");
+    fflush(stdout);
     uint64_t state = process_get_state(pcb);
+    printf("DEBUG: process_get_state() completed, state=%llu\n", state);
+    fflush(stdout);
+    
+    printf("DEBUG: About to call test_assert_equal for state\n");
+    fflush(stdout);
     test_assert_equal(PROCESS_STATE_WAITING, state, "block_state_change");
+    printf("DEBUG: test_assert_equal for state completed\n");
+    fflush(stdout);
     
     // Test waking the process
-    int wake_result = process_wake(0, pcb);
+    printf("DEBUG: About to call process_wake()\n");
+    fflush(stdout);
+    int wake_result = process_wake(scheduler_state, 0, pcb);
+    printf("DEBUG: process_wake() completed, result=%d\n", wake_result);
+    fflush(stdout);
+    
+    printf("DEBUG: About to call test_assert_equal for wake_result\n");
+    fflush(stdout);
     test_assert_equal(1, wake_result, "wake_success");
+    printf("DEBUG: test_assert_equal for wake_result completed\n");
+    fflush(stdout);
     
     // Verify process state changed back to READY
+    printf("DEBUG: About to call process_get_state() again\n");
+    fflush(stdout);
     state = process_get_state(pcb);
+    printf("DEBUG: process_get_state() completed again, state=%llu\n", state);
+    fflush(stdout);
+    
+    printf("DEBUG: About to call test_assert_equal for state again\n");
+    fflush(stdout);
     test_assert_equal(PROCESS_STATE_READY, state, "wake_state_change");
+    printf("DEBUG: test_assert_equal for state again completed\n");
+    fflush(stdout);
     
     // Test invalid core ID
-    next_process = process_block(128, pcb, REASON_RECEIVE);
+    printf("DEBUG: About to test invalid core ID\n");
+    fflush(stdout);
+    next_process = process_block(scheduler_state, 128, pcb, REASON_RECEIVE);
     test_assert_zero((uint64_t)next_process, "block_invalid_core");
+    printf("DEBUG: Invalid core ID test completed\n");
+    fflush(stdout);
     
     // Test invalid PCB
-    next_process = process_block(0, NULL, REASON_RECEIVE);
+    printf("DEBUG: About to test invalid PCB\n");
+    fflush(stdout);
+    next_process = process_block(scheduler_state, 0, NULL, REASON_RECEIVE);
     test_assert_zero((uint64_t)next_process, "block_invalid_pcb");
+    printf("DEBUG: Invalid PCB test completed\n");
+    fflush(stdout);
     
     // Test invalid reason
-    next_process = process_block(0, pcb, 99);
+    printf("DEBUG: About to test invalid reason\n");
+    fflush(stdout);
+    next_process = process_block(scheduler_state, 0, pcb, 99);
     test_assert_zero((uint64_t)next_process, "block_invalid_reason");
+    printf("DEBUG: Invalid reason test completed\n");
+    fflush(stdout);
     
     // Test wake with invalid core ID
-    wake_result = process_wake(128, pcb);
+    printf("DEBUG: About to test wake with invalid core ID\n");
+    fflush(stdout);
+    wake_result = process_wake(scheduler_state, 128, pcb);
     test_assert_equal(0, wake_result, "wake_invalid_core");
+    printf("DEBUG: Wake with invalid core ID test completed\n");
+    fflush(stdout);
     
     // Test wake with invalid PCB
-    wake_result = process_wake(0, NULL);
+    printf("DEBUG: About to test wake with invalid PCB\n");
+    fflush(stdout);
+    wake_result = process_wake(scheduler_state, 0, NULL);
     test_assert_equal(0, wake_result, "wake_invalid_pcb");
+    printf("DEBUG: Wake with invalid PCB test completed\n");
+    fflush(stdout);
     
     // Cleanup
+    printf("DEBUG: About to cleanup - calling free(pcb)\n");
+    fflush(stdout);
     free(pcb);
+    printf("DEBUG: free(pcb) completed\n");
+    fflush(stdout);
+    
+    // Clean up scheduler state
+    printf("DEBUG: About to cleanup - calling scheduler_state_destroy()\n");
+    fflush(stdout);
+    scheduler_state_destroy(scheduler_state);
+    printf("DEBUG: scheduler_state_destroy() completed\n");
+    fflush(stdout);
+    
+    printf("DEBUG: test_process_block_and_wake() completed successfully\n");
+    fflush(stdout);
 }
 
 // ------------------------------------------------------------
 // Test Process Block on Receive Function
 // ------------------------------------------------------------
-void test_process_block_on_receive(void) {
+void test_process_block_on_receive() {
     printf("\n--- Testing process_block_on_receive (Message Receive Blocking) ---\n");
+    printf("DEBUG: test_process_block_on_receive() starting\n");
+    fflush(stdout);
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create single-core scheduler state
+    printf("DEBUG: About to call scheduler_state_init() in test_process_block_on_receive()\n");
+    fflush(stdout);
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    printf("DEBUG: scheduler_state_init() completed in test_process_block_on_receive()\n");
+    fflush(stdout);
+    
+    // Initialize scheduler for core 0
+    printf("DEBUG: About to call scheduler_init() in test_process_block_on_receive()\n");
+    fflush(stdout);
+    scheduler_init(scheduler_state, 0);
+    printf("DEBUG: scheduler_init() completed in test_process_block_on_receive()\n");
+    fflush(stdout);
     
     // Create test process
+    printf("DEBUG: About to call create_blocking_test_process() in test_process_block_on_receive()\n");
+    fflush(stdout);
     void* pcb = create_blocking_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
+    printf("DEBUG: create_blocking_test_process() completed in test_process_block_on_receive()\n");
+    fflush(stdout);
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    printf("DEBUG: About to call scheduler_set_current_process_with_state() in test_process_block_on_receive()\n");
+    fflush(stdout);
+    scheduler_set_current_process_with_state(scheduler_state, 0, pcb);
+    printf("DEBUG: scheduler_set_current_process_with_state() completed in test_process_block_on_receive()\n");
+    fflush(stdout);
     
     // Test blocking on receive with pattern
-    void* message = process_block_on_receive(0, pcb, 0x12345678);
+    printf("DEBUG: About to call process_block_on_receive() in test_process_block_on_receive()\n");
+    fflush(stdout);
+    void* message = process_block_on_receive(scheduler_state, 0, pcb, 0x12345678);
     test_assert_zero((uint64_t)message, "block_on_receive_no_message");
+    printf("DEBUG: process_block_on_receive() completed in test_process_block_on_receive()\n");
+    fflush(stdout);
     
     // Verify process state changed to WAITING
+    printf("DEBUG: About to call process_get_state() in test_process_block_on_receive()\n");
+    fflush(stdout);
     uint64_t state = process_get_state(pcb);
     test_assert_equal(PROCESS_STATE_WAITING, state, "block_on_receive_state_change");
+    printf("DEBUG: process_get_state() completed in test_process_block_on_receive()\n");
+    fflush(stdout);
     
     // Test invalid core ID
-    message = process_block_on_receive(128, pcb, 0x12345678);
+    printf("DEBUG: About to test invalid core ID in test_process_block_on_receive()\n");
+    fflush(stdout);
+    message = process_block_on_receive(scheduler_state, 128, pcb, 0x12345678);
     test_assert_zero((uint64_t)message, "block_on_receive_invalid_core");
+    printf("DEBUG: Invalid core ID test completed in test_process_block_on_receive()\n");
+    fflush(stdout);
     
     // Test invalid PCB
-    message = process_block_on_receive(0, NULL, 0x12345678);
+    printf("DEBUG: About to test invalid PCB in test_process_block_on_receive()\n");
+    fflush(stdout);
+    message = process_block_on_receive(scheduler_state, 0, NULL, 0x12345678);
     test_assert_zero((uint64_t)message, "block_on_receive_invalid_pcb");
+    printf("DEBUG: Invalid PCB test completed in test_process_block_on_receive()\n");
+    fflush(stdout);
     
     // Cleanup
+    printf("DEBUG: About to cleanup in test_process_block_on_receive()\n");
+    fflush(stdout);
     free(pcb);
+    printf("DEBUG: free(pcb) completed in test_process_block_on_receive()\n");
+    fflush(stdout);
+    
+    // Clean up scheduler state
+    printf("DEBUG: About to call scheduler_state_destroy() in test_process_block_on_receive()\n");
+    fflush(stdout);
+    scheduler_state_destroy(scheduler_state);
+    printf("DEBUG: scheduler_state_destroy() completed in test_process_block_on_receive()\n");
+    fflush(stdout);
+    
+    printf("DEBUG: test_process_block_on_receive() completed successfully\n");
+    fflush(stdout);
 }
 
 // ------------------------------------------------------------
 // Test Process Block on Timer Function
 // ------------------------------------------------------------
-void test_process_block_on_timer(void) {
+void test_process_block_on_timer() {
     printf("\n--- Testing process_block_on_timer (Timer-based Blocking) ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_blocking_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process_with_state(scheduler_state, 0, pcb);
     
     // Test blocking on timer with timeout
-    int result = process_block_on_timer(0, pcb, 1000);
+    int result = process_block_on_timer(scheduler_state, 0, pcb, 1000);
     test_assert_equal(1, result, "block_on_timer_success");
     
     // Verify process state changed to WAITING
@@ -253,65 +400,125 @@ void test_process_block_on_timer(void) {
     test_assert_equal(PROCESS_STATE_WAITING, state, "block_on_timer_state_change");
     
     // Test invalid core ID
-    result = process_block_on_timer(128, pcb, 1000);
+    result = process_block_on_timer(scheduler_state, 128, pcb, 1000);
     test_assert_equal(0, result, "block_on_timer_invalid_core");
     
     // Test invalid PCB
-    result = process_block_on_timer(0, NULL, 1000);
+    result = process_block_on_timer(scheduler_state, 0, NULL, 1000);
     test_assert_equal(0, result, "block_on_timer_invalid_pcb");
     
     // Test invalid timeout
-    result = process_block_on_timer(0, pcb, MAX_BLOCKING_TIME + 1);
+    result = process_block_on_timer(scheduler_state, 0, pcb, MAX_BLOCKING_TIME + 1);
     test_assert_equal(0, result, "block_on_timer_invalid_timeout");
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Process Block on I/O Function
 // ------------------------------------------------------------
-void test_process_block_on_io(void) {
+void test_process_block_on_io() {
     printf("\n--- Testing process_block_on_io (I/O Blocking) ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    printf("DEBUG: About to call scheduler_state_init in test_process_block_on_io\n");
+    fflush(stdout);
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    printf("DEBUG: scheduler_state_init completed in test_process_block_on_io\n");
+    fflush(stdout);
+    
+    // Initialize scheduler for core 0
+    printf("DEBUG: About to call scheduler_init in test_process_block_on_io\n");
+    fflush(stdout);
+    scheduler_init(scheduler_state, 0);
+    printf("DEBUG: scheduler_init completed in test_process_block_on_io\n");
+    fflush(stdout);
     
     // Create test process
+    printf("DEBUG: About to call create_blocking_test_process in test_process_block_on_io\n");
+    fflush(stdout);
     void* pcb = create_blocking_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
+    printf("DEBUG: create_blocking_test_process completed in test_process_block_on_io\n");
+    fflush(stdout);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    printf("DEBUG: About to call scheduler_set_current_process_with_state in test_process_block_on_io\n");
+    fflush(stdout);
+    scheduler_set_current_process_with_state(scheduler_state, 0, pcb);
+    printf("DEBUG: scheduler_set_current_process_with_state completed in test_process_block_on_io\n");
+    fflush(stdout);
     
     // Test blocking on I/O with descriptor
-    int result = process_block_on_io(0, pcb, 0x12345678);
+    printf("DEBUG: About to call process_block_on_io in test_process_block_on_io\n");
+    fflush(stdout);
+    int result = process_block_on_io(scheduler_state, 0, pcb, 0x12345678);
+    printf("DEBUG: process_block_on_io completed in test_process_block_on_io, result=%d\n", result);
+    fflush(stdout);
     test_assert_equal(1, result, "block_on_io_success");
     
     // Verify process state changed to WAITING
+    printf("DEBUG: About to call process_get_state in test_process_block_on_io\n");
+    fflush(stdout);
     uint64_t state = process_get_state(pcb);
+    printf("DEBUG: process_get_state completed in test_process_block_on_io, state=%llu\n", state);
+    fflush(stdout);
     test_assert_equal(PROCESS_STATE_WAITING, state, "block_on_io_state_change");
     
     // Test invalid core ID
-    result = process_block_on_io(128, pcb, 0x12345678);
+    printf("DEBUG: About to test invalid core ID in test_process_block_on_io\n");
+    fflush(stdout);
+    result = process_block_on_io(scheduler_state, 128, pcb, 0x12345678);
+    printf("DEBUG: Invalid core ID test completed in test_process_block_on_io\n");
+    fflush(stdout);
     test_assert_equal(0, result, "block_on_io_invalid_core");
     
     // Test invalid PCB
-    result = process_block_on_io(0, NULL, 0x12345678);
+    printf("DEBUG: About to test invalid PCB in test_process_block_on_io\n");
+    fflush(stdout);
+    result = process_block_on_io(scheduler_state, 0, NULL, 0x12345678);
+    printf("DEBUG: Invalid PCB test completed in test_process_block_on_io\n");
+    fflush(stdout);
     test_assert_equal(0, result, "block_on_io_invalid_pcb");
     
     // Cleanup
+    printf("DEBUG: About to cleanup in test_process_block_on_io\n");
+    fflush(stdout);
     free(pcb);
+    printf("DEBUG: free(pcb) completed in test_process_block_on_io\n");
+    fflush(stdout);
+    
+    // Clean up scheduler state
+    printf("DEBUG: About to call scheduler_state_destroy in test_process_block_on_io\n");
+    fflush(stdout);
+    scheduler_state_destroy(scheduler_state);
+    printf("DEBUG: scheduler_state_destroy completed in test_process_block_on_io\n");
+    fflush(stdout);
 }
 
 // ------------------------------------------------------------
 // Test Waiting Queue Management
 // ------------------------------------------------------------
-void test_waiting_queue_management(void) {
+void test_waiting_queue_management() {
     printf("\n--- Testing Waiting Queue Management ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create multiple test processes
     void* pcb1 = create_blocking_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
@@ -323,9 +530,9 @@ void test_waiting_queue_management(void) {
     test_assert_not_zero((uint64_t)pcb3, "test_process3_creation");
     
     // Block processes with different reasons
-    process_block(0, pcb1, REASON_RECEIVE);
-    process_block(0, pcb2, REASON_TIMER);
-    process_block(0, pcb3, REASON_IO);
+    process_block(scheduler_state, 0, pcb1, REASON_RECEIVE);
+    process_block(scheduler_state, 0, pcb2, REASON_TIMER);
+    process_block(scheduler_state, 0, pcb3, REASON_IO);
     
     // Verify all processes are in WAITING state
     uint64_t state1 = process_get_state(pcb1);
@@ -337,9 +544,9 @@ void test_waiting_queue_management(void) {
     test_assert_equal(PROCESS_STATE_WAITING, state3, "process3_waiting_state");
     
     // Wake all processes
-    int wake1 = process_wake(0, pcb1);
-    int wake2 = process_wake(0, pcb2);
-    int wake3 = process_wake(0, pcb3);
+    int wake1 = process_wake(scheduler_state, 0, pcb1);
+    int wake2 = process_wake(scheduler_state, 0, pcb2);
+    int wake3 = process_wake(scheduler_state, 0, pcb3);
     
     test_assert_equal(1, wake1, "wake_process1");
     test_assert_equal(1, wake2, "wake_process2");
@@ -358,26 +565,36 @@ void test_waiting_queue_management(void) {
     free(pcb1);
     free(pcb2);
     free(pcb3);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Timer Wakeup Checking
 // ------------------------------------------------------------
-void test_timer_wakeup_checking(void) {
+void test_timer_wakeup_checking() {
     printf("\n--- Testing Timer Wakeup Checking ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_blocking_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process_with_state(scheduler_state, 0, pcb);
     
     // Block process on timer with short timeout
-    int result = process_block_on_timer(0, pcb, 100);
+    int result = process_block_on_timer(scheduler_state, 0, pcb, 100);
     test_assert_equal(1, result, "block_on_timer_short_timeout");
     
     // Check timer wakeups (should not wake yet)
@@ -390,28 +607,38 @@ void test_timer_wakeup_checking(void) {
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Block-Wake Cycle
 // ------------------------------------------------------------
-void test_block_wake_cycle(void) {
+void test_block_wake_cycle() {
     printf("\n--- Testing Block-Wake Cycle ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_blocking_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process_with_state(scheduler_state, 0, pcb);
     
     // Test multiple block-wake cycles
     for (int i = 0; i < 3; i++) {
         // Block process
-        void* next_process = process_block(0, pcb, REASON_RECEIVE);
+        void* next_process = process_block(scheduler_state, 0, pcb, REASON_RECEIVE);
         test_assert_zero((uint64_t)next_process, "block_cycle");
         
         // Verify WAITING state
@@ -419,7 +646,7 @@ void test_block_wake_cycle(void) {
         test_assert_equal(PROCESS_STATE_WAITING, state, "block_cycle_state");
         
         // Wake process
-        int wake_result = process_wake(0, pcb);
+        int wake_result = process_wake(scheduler_state, 0, pcb);
         test_assert_equal(1, wake_result, "wake_cycle");
         
         // Verify READY state
@@ -429,6 +656,9 @@ void test_block_wake_cycle(void) {
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
@@ -437,11 +667,18 @@ void test_block_wake_cycle(void) {
 // ------------------------------------------------------------
 // test_scheduler_enqueue_basic — Test basic scheduler_enqueue_process functionality
 // ------------------------------------------------------------
-void test_scheduler_enqueue_basic(void) {
+void test_scheduler_enqueue_basic() {
     printf("\n--- Testing scheduler_enqueue_process Basic Functionality ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create a simple test process
     typedef struct {
@@ -459,7 +696,7 @@ void test_scheduler_enqueue_basic(void) {
         pcb->priority = 2; // PRIORITY_NORMAL
         
         // Test scheduler_enqueue_process
-        int result = scheduler_enqueue_process(0, pcb, 2); // PRIORITY_NORMAL
+        int result = scheduler_enqueue_process(scheduler_state, 0, pcb, 2); // PRIORITY_NORMAL
         test_assert_not_zero(result, "scheduler_enqueue_process should return non-zero");
         
         // Cleanup
@@ -467,36 +704,204 @@ void test_scheduler_enqueue_basic(void) {
     }
     
     printf("✓ Basic scheduler_enqueue_process tests passed\n");
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // test_scheduler_enqueue_edge_cases — Test scheduler_enqueue_process edge cases
 // ------------------------------------------------------------
-void test_scheduler_enqueue_edge_cases(void) {
+void test_scheduler_enqueue_edge_cases() {
     printf("\n--- Testing scheduler_enqueue_process Edge Cases ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Test with NULL process (should return 0)
-    int result = scheduler_enqueue_process(0, NULL, 2);
+    int result = scheduler_enqueue_process(scheduler_state, 0, NULL, 2);
     test_assert_equal(result, 0, "scheduler_enqueue_process with NULL process should return 0");
     
     // Test with invalid core ID (should return 0)
-    result = scheduler_enqueue_process(128, NULL, 2);
+    result = scheduler_enqueue_process(scheduler_state, 128, NULL, 2);
     test_assert_equal(result, 0, "scheduler_enqueue_process with invalid core ID should return 0");
     
     printf("✓ Edge case tests passed\n");
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Main Test Function
 // ------------------------------------------------------------
-void test_blocking_main(void) {
+void test_blocking_main() {
     printf("\n=== BLOCKING OPERATIONS TEST SUITE ===\n");
+    printf("DEBUG: test_blocking_main() starting\n");
+    fflush(stdout);
     
-    test_scheduler_enqueue_basic();
-    test_scheduler_enqueue_edge_cases();
+    // Test generic blocking and waking
+    printf("DEBUG: About to call test_process_block_and_wake()\n");
+    fflush(stdout);
+    test_process_block_and_wake();
+    printf("DEBUG: test_process_block_and_wake() completed\n");
+    fflush(stdout);
     
+    printf("DEBUG: About to start test_process_block_on_receive()\n");
+    fflush(stdout);
+    // Test message receive blocking
+    printf("DEBUG: About to call test_process_block_on_receive()\n");
+    fflush(stdout);
+    test_process_block_on_receive();
+    printf("DEBUG: test_process_block_on_receive() completed\n");
+    fflush(stdout);
+    
+    printf("DEBUG: About to start test_process_block_on_timer()\n");
+    fflush(stdout);
+    // Test timer-based blocking
+    printf("DEBUG: About to call test_process_block_on_timer()\n");
+    fflush(stdout);
+    test_process_block_on_timer();
+    printf("DEBUG: test_process_block_on_timer() completed\n");
+    fflush(stdout);
+    
+    printf("DEBUG: About to start test_process_block_on_io()\n");
+    fflush(stdout);
+    // Test I/O blocking
+    printf("DEBUG: About to call test_process_block_on_io()\n");
+    fflush(stdout);
+    test_process_block_on_io();
+    printf("DEBUG: test_process_block_on_io() completed\n");
+    fflush(stdout);
+    
+    // Test message pattern matching functionality
+    printf("DEBUG: About to call test_message_pattern_matching()\n");
+    fflush(stdout);
+    test_message_pattern_matching();
+    printf("DEBUG: test_message_pattern_matching() completed\n");
+    fflush(stdout);
+    
+    printf("DEBUG: About to print completion message\n");
+    fflush(stdout);
     printf("\n=== BLOCKING OPERATIONS TEST SUITE COMPLETE ===\n");
+    printf("DEBUG: test_blocking_main() completed successfully\n");
+    fflush(stdout);
+}
+
+// ------------------------------------------------------------
+// Test Message Pattern Matching Function
+// ------------------------------------------------------------
+void test_message_pattern_matching() {
+    printf("\n--- Testing Message Pattern Matching (Enhanced) ---\n");
+    printf("DEBUG: test_message_pattern_matching() starting\n");
+    fflush(stdout);
+    
+    // Create isolated scheduler state
+    printf("DEBUG: About to call scheduler_state_init() in test_message_pattern_matching()\n");
+    fflush(stdout);
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    printf("DEBUG: scheduler_state_init() completed in test_message_pattern_matching()\n");
+    fflush(stdout);
+    
+    // Initialize scheduler for core 0
+    printf("DEBUG: About to call scheduler_init() in test_message_pattern_matching()\n");
+    fflush(stdout);
+    scheduler_init(scheduler_state, 0);
+    printf("DEBUG: scheduler_init() completed in test_message_pattern_matching()\n");
+    fflush(stdout);
+    
+    // Create test process
+    printf("DEBUG: About to call create_blocking_test_process() in test_message_pattern_matching()\n");
+    fflush(stdout);
+    void* pcb = create_blocking_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
+    test_assert_not_zero((uint64_t)pcb, "test_process_creation_pattern");
+    printf("DEBUG: create_blocking_test_process() completed in test_message_pattern_matching()\n");
+    fflush(stdout);
+    
+    // Set as current process
+    printf("DEBUG: About to call scheduler_set_current_process_with_state() in test_message_pattern_matching()\n");
+    fflush(stdout);
+    scheduler_set_current_process_with_state(scheduler_state, 0, pcb);
+    printf("DEBUG: scheduler_set_current_process_with_state() completed in test_message_pattern_matching()\n");
+    fflush(stdout);
+    
+    // Test 1: Exact pattern matching (no messages in queue)
+    printf("DEBUG: Testing exact pattern matching with empty queue\n");
+    fflush(stdout);
+    void* message = process_block_on_receive(scheduler_state, 0, pcb, 0x12345678);
+    test_assert_zero((uint64_t)message, "pattern_match_empty_queue");
+    
+    // Verify process state changed to WAITING
+    uint64_t state = process_get_state(pcb);
+    test_assert_equal(PROCESS_STATE_WAITING, state, "pattern_match_state_change");
+    
+    // Test 2: Wildcard pattern matching (0xFFFFFFFF)
+    printf("DEBUG: Testing wildcard pattern matching\n");
+    fflush(stdout);
+    // Reset process state for next test
+    process_set_state(pcb, PROCESS_STATE_RUNNING);
+    
+    void* wildcard_message = process_block_on_receive(scheduler_state, 0, pcb, 0xFFFFFFFF);
+    test_assert_zero((uint64_t)wildcard_message, "wildcard_pattern_match_empty_queue");
+    
+    // Verify process state changed to WAITING
+    state = process_get_state(pcb);
+    test_assert_equal(PROCESS_STATE_WAITING, state, "wildcard_pattern_state_change");
+    
+    // Test 3: Invalid core ID
+    printf("DEBUG: Testing invalid core ID for pattern matching\n");
+    fflush(stdout);
+    process_set_state(pcb, PROCESS_STATE_RUNNING);
+    
+    void* invalid_message = process_block_on_receive(scheduler_state, 128, pcb, 0x12345678);
+    test_assert_zero((uint64_t)invalid_message, "pattern_match_invalid_core");
+    
+    // Test 4: Invalid PCB
+    printf("DEBUG: Testing invalid PCB for pattern matching\n");
+    fflush(stdout);
+    void* null_message = process_block_on_receive(scheduler_state, 0, NULL, 0x12345678);
+    test_assert_zero((uint64_t)null_message, "pattern_match_invalid_pcb");
+    
+    // Test 5: Test pattern storage in PCB
+    printf("DEBUG: Testing pattern storage in PCB\n");
+    fflush(stdout);
+    process_set_state(pcb, PROCESS_STATE_RUNNING);
+    
+    uint64_t test_pattern = 0xDEADBEEF;
+    void* stored_message = process_block_on_receive(scheduler_state, 0, pcb, test_pattern);
+    test_assert_zero((uint64_t)stored_message, "pattern_storage_test");
+    
+    // Verify pattern was stored in PCB
+    // Note: This would require a getter function for message_pattern field
+    // For now, just verify the process is in WAITING state
+    state = process_get_state(pcb);
+    test_assert_equal(PROCESS_STATE_WAITING, state, "pattern_storage_state_verification");
+    
+    // Cleanup
+    printf("DEBUG: About to cleanup in test_message_pattern_matching()\n");
+    fflush(stdout);
+    free(pcb);
+    printf("DEBUG: free(pcb) completed in test_message_pattern_matching()\n");
+    fflush(stdout);
+    
+    // Clean up scheduler state
+    printf("DEBUG: About to call scheduler_state_destroy() in test_message_pattern_matching()\n");
+    fflush(stdout);
+    scheduler_state_destroy(scheduler_state);
+    printf("DEBUG: scheduler_state_destroy() completed in test_message_pattern_matching()\n");
+    fflush(stdout);
+    
+    printf("DEBUG: test_message_pattern_matching() completed successfully\n");
+    fflush(stdout);
 }

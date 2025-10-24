@@ -16,7 +16,7 @@ scheduler_only_tests
 test_process_integration
 
 # Build directories
-lib/bin/
+lib/
 build/
 dist/
 

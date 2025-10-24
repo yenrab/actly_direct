@@ -13,21 +13,19 @@ extern void* process_allocate_stack(void* pcb, uint32_t size);
 extern int trigger_garbage_collection(void* pcb);
 
 int main() {
-    printf("Testing simple BEAM functions...\n");
-    
     // Test 1: Call with NULL PCB (should return NULL)
-    printf("Test 1: NULL PCB test...\n");
     void* result = process_allocate_stack(NULL, 1024);
-    if (result == NULL) {
-        printf("✓ NULL PCB handled correctly\n");
-    } else {
+    if (result != NULL) {
         printf("✗ NULL PCB not handled correctly\n");
+        return 1;
     }
     
     // Test 2: Call garbage collection
-    printf("Test 2: Garbage collection test...\n");
     int gc_result = trigger_garbage_collection(NULL);
-    printf("✓ GC returned: %d\n", gc_result);
+    if (gc_result != 0) {
+        printf("✗ GC returned unexpected result: %d\n", gc_result);
+        return 1;
+    }
     
     printf("✓ Simple test completed successfully\n");
     return 0;

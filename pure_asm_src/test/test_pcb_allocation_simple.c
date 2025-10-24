@@ -211,7 +211,7 @@ void test_pcb_allocation(void) {
     printf("========================\n");
 }
 
-int main(void) {
+int main() {
     printf("Starting PCB allocation tests...\n");
     test_pcb_allocation();
     printf("PCB allocation tests completed\n");

@@ -39,18 +39,21 @@
 #include <stdlib.h>
 
 // External assembly functions
+extern void* scheduler_state_init(uint64_t max_cores);
+extern void scheduler_state_destroy(void* scheduler_states);
 extern int actly_yield(uint64_t core_id);
 extern uint64_t actly_spawn(uint64_t core_id, uint64_t entry_point, uint64_t priority, uint64_t stack_size, uint64_t heap_size);
 extern void actly_exit(uint64_t core_id, uint64_t exit_reason);
-extern int actly_bif_trap_check(uint64_t core_id, uint64_t reduction_cost);
+extern int actly_bif_trap_check(void* scheduler_states, uint64_t core_id, uint64_t reduction_cost);
 
 // External scheduler functions
-extern void scheduler_init(uint64_t core_id);
-extern void* scheduler_get_current_process(uint64_t core_id);
-extern void scheduler_set_current_process(uint64_t core_id, void* process);
-extern uint64_t scheduler_get_reduction_count(uint64_t core_id);
-extern void scheduler_set_reduction_count(uint64_t core_id, uint64_t count);
-extern int scheduler_enqueue_process(uint64_t core_id, void* process, uint64_t priority);
+extern void scheduler_init(void* scheduler_states, uint64_t core_id);
+extern void* scheduler_get_current_process(void* scheduler_states, uint64_t core_id);
+extern void scheduler_set_current_process(void* scheduler_states, uint64_t core_id, void* process);
+extern uint64_t scheduler_get_reduction_count(void* scheduler_states, uint64_t core_id);
+extern void scheduler_set_reduction_count_with_state(void* scheduler_states, uint64_t core_id, uint64_t count);
+extern uint64_t scheduler_get_reduction_count_with_state(void* scheduler_states, uint64_t core_id);
+extern int scheduler_enqueue_process(void* scheduler_states, uint64_t core_id, void* process, uint64_t priority);
 
 // External process functions
 extern void* process_create(uint64_t entry_point, uint64_t priority, uint64_t stack_size, uint64_t heap_size);
@@ -71,6 +74,7 @@ extern void test_assert_zero(uint64_t value, const char* test_name);
 extern void test_assert_not_zero(uint64_t value, const char* test_name);
 
 // External constants
+extern const uint64_t MAX_CORES_CONST;
 extern const uint64_t DEFAULT_REDUCTIONS;
 extern const uint64_t PROCESS_STATE_READY;
 extern const uint64_t PROCESS_STATE_RUNNING;
@@ -142,21 +146,28 @@ void* create_actly_bifs_test_process(uint64_t pid, uint64_t priority, uint64_t s
 // ------------------------------------------------------------
 // Test Actly Yield BIF Function
 // ------------------------------------------------------------
-void test_actly_yield(void) {
+void test_actly_yield() {
     printf("\n--- Testing actly_yield (Actly Yield BIF) ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_actly_bifs_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
     
     // Set reduction count to allow yield
-    scheduler_set_reduction_count(0, 10);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 10);
     
     // Test actly yield
     int result = actly_yield(0);
@@ -167,32 +178,42 @@ void test_actly_yield(void) {
     test_assert_equal(0, result, "actly_yield_invalid_core");
     
     // Test with no current process
-    scheduler_set_current_process(0, NULL);
+    scheduler_set_current_process(scheduler_state, 0, NULL);
     result = actly_yield(0);
     test_assert_equal(0, result, "actly_yield_no_process");
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Actly Spawn BIF Function
 // ------------------------------------------------------------
-void test_actly_spawn(void) {
+void test_actly_spawn() {
     printf("\n--- Testing actly_spawn (Actly Spawn BIF) ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_actly_bifs_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
     
     // Set reduction count to allow spawn
-    scheduler_set_reduction_count(0, 20);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 20);
     
     // Test actly spawn with valid parameters
     uint64_t new_pid = actly_spawn(0, 0x1000, PRIORITY_NORMAL, 8192, 4096);
@@ -215,32 +236,42 @@ void test_actly_spawn(void) {
     test_assert_zero(new_pid, "actly_spawn_invalid_heap_size");
     
     // Test with insufficient reductions (should preempt)
-    scheduler_set_reduction_count(0, 5); // Less than BIF_SPAWN_COST
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 5); // Less than BIF_SPAWN_COST
     new_pid = actly_spawn(0, 0x1000, PRIORITY_NORMAL, 8192, 4096);
     test_assert_zero(new_pid, "actly_spawn_insufficient_reductions");
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Actly Exit BIF Function
 // ------------------------------------------------------------
-void test_actly_exit(void) {
+void test_actly_exit() {
     printf("\n--- Testing actly_exit (Actly Exit BIF) ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_actly_bifs_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
     
     // Set reduction count to allow exit
-    scheduler_set_reduction_count(0, 10);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 10);
     
     // Test actly exit with valid reason
     // Note: This function never returns, so we can't test the return value
@@ -251,117 +282,147 @@ void test_actly_exit(void) {
     printf("Testing actly_exit with invalid core ID...\n");
     
     // Test with no current process (should return without crashing)
-    scheduler_set_current_process(0, NULL);
+    scheduler_set_current_process(scheduler_state, 0, NULL);
     printf("Testing actly_exit with no current process...\n");
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test BIF Trap Mechanism
 // ------------------------------------------------------------
-void test_bif_trap_mechanism(void) {
+void test_bif_trap_mechanism() {
     printf("\n--- Testing BIF Trap Mechanism ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_actly_bifs_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
     
     // Test BIF trap check with sufficient reductions
-    scheduler_set_reduction_count(0, 10);
-    int result = actly_bif_trap_check(0, 5);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 10);
+    int result = actly_bif_trap_check(scheduler_state, 0, 5);
     test_assert_equal(1, result, "bif_trap_sufficient_reductions");
     
     // Verify reduction count decreased
-    uint64_t count = scheduler_get_reduction_count(0);
+    uint64_t count = scheduler_get_reduction_count_with_state(scheduler_state, 0);
     test_assert_equal(5, count, "bif_trap_count_decreased");
     
     // Test BIF trap check with insufficient reductions
-    result = actly_bif_trap_check(0, 10);
+    result = actly_bif_trap_check(scheduler_state, 0, 10);
     test_assert_equal(0, result, "bif_trap_insufficient_reductions");
     
     // Test BIF trap check with exact reductions
-    scheduler_set_reduction_count(0, 3);
-    result = actly_bif_trap_check(0, 3);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 3);
+    result = actly_bif_trap_check(scheduler_state, 0, 3);
     test_assert_equal(0, result, "bif_trap_exact_reductions");
     
     // Test invalid core ID
-    result = actly_bif_trap_check(128, 5);
+    result = actly_bif_trap_check(scheduler_state, 128, 5);
     test_assert_equal(1, result, "bif_trap_invalid_core");
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test BIF Reduction Costs
 // ------------------------------------------------------------
-void test_bif_reduction_costs(void) {
+void test_bif_reduction_costs() {
     printf("\n--- Testing BIF Reduction Costs ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_actly_bifs_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
     
     // Test yield cost (1 reduction)
-    scheduler_set_reduction_count(0, 5);
-    int result = actly_bif_trap_check(0, BIF_YIELD_COST);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 5);
+    int result = actly_bif_trap_check(scheduler_state, 0, BIF_YIELD_COST);
     test_assert_equal(1, result, "yield_cost_check");
     
-    uint64_t count = scheduler_get_reduction_count(0);
+    uint64_t count = scheduler_get_reduction_count_with_state(scheduler_state, 0);
     test_assert_equal(4, count, "yield_cost_decreased");
     
     // Test exit cost (1 reduction)
-    scheduler_set_reduction_count(0, 5);
-    result = actly_bif_trap_check(0, BIF_EXIT_COST);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 5);
+    result = actly_bif_trap_check(scheduler_state, 0, BIF_EXIT_COST);
     test_assert_equal(1, result, "exit_cost_check");
     
-    count = scheduler_get_reduction_count(0);
+    count = scheduler_get_reduction_count_with_state(scheduler_state, 0);
     test_assert_equal(4, count, "exit_cost_decreased");
     
     // Test spawn cost (10 reductions)
-    scheduler_set_reduction_count(0, 15);
-    result = actly_bif_trap_check(0, BIF_SPAWN_COST);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 15);
+    result = actly_bif_trap_check(scheduler_state, 0, BIF_SPAWN_COST);
     test_assert_equal(1, result, "spawn_cost_check");
     
-    count = scheduler_get_reduction_count(0);
+    count = scheduler_get_reduction_count_with_state(scheduler_state, 0);
     test_assert_equal(5, count, "spawn_cost_decreased");
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Spawn-Yield-Exit Lifecycle
 // ------------------------------------------------------------
-void test_actly_bifs_spawn_yield_exit_lifecycle(void) {
+void test_actly_bifs_spawn_yield_exit_lifecycle() {
     printf("\n--- Testing Spawn-Yield-Exit Lifecycle ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_actly_bifs_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
     
     // Set sufficient reduction count
-    scheduler_set_reduction_count(0, 50);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 50);
     
     // Test spawn operation
     uint64_t new_pid = actly_spawn(0, 0x1000, PRIORITY_NORMAL, 8192, 4096);
@@ -376,16 +437,26 @@ void test_actly_bifs_spawn_yield_exit_lifecycle(void) {
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Multiple Processes with BIFs
 // ------------------------------------------------------------
-void test_multiple_processes_bifs(void) {
+void test_multiple_processes_bifs() {
     printf("\n--- Testing Multiple Processes with BIFs ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create multiple test processes
     void* pcb1 = create_actly_bifs_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
@@ -395,13 +466,13 @@ void test_multiple_processes_bifs(void) {
     test_assert_not_zero((uint64_t)pcb2, "test_process2_creation");
     
     // Set first process as current
-    scheduler_set_current_process(0, pcb1);
+    scheduler_set_current_process(scheduler_state, 0, pcb1);
     
     // Add second process to ready queue
-    scheduler_enqueue_process(0, pcb2, PRIORITY_HIGH);
+    scheduler_enqueue_process(scheduler_state, 0, pcb2, PRIORITY_HIGH);
     
     // Set sufficient reduction count
-    scheduler_set_reduction_count(0, 50);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 50);
     
     // Test spawn from first process
     uint64_t new_pid = actly_spawn(0, 0x1000, PRIORITY_NORMAL, 8192, 4096);
@@ -414,6 +485,9 @@ void test_multiple_processes_bifs(void) {
     // Cleanup
     free(pcb1);
     free(pcb2);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
@@ -422,11 +496,10 @@ void test_multiple_processes_bifs(void) {
 // ------------------------------------------------------------
 // test_process_save_context_basic — Test basic process_save_context functionality
 // ------------------------------------------------------------
-void test_process_save_context_basic(void) {
+void test_process_save_context_basic() {
     printf("\n--- Testing process_save_context Basic Functionality ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Scheduler should already be initialized by previous tests
     
     // Create a simple test process
     typedef struct {
@@ -465,11 +538,10 @@ void test_process_save_context_basic(void) {
 // ------------------------------------------------------------
 // test_process_restore_context_basic — Test basic process_restore_context functionality
 // ------------------------------------------------------------
-void test_process_restore_context_basic(void) {
+void test_process_restore_context_basic() {
     printf("\n--- Testing process_restore_context Basic Functionality ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Scheduler should already be initialized by previous tests
     
     // Create a simple test process
     typedef struct {
@@ -508,11 +580,10 @@ void test_process_restore_context_basic(void) {
 // ------------------------------------------------------------
 // test_context_functions_edge_cases — Test context functions edge cases
 // ------------------------------------------------------------
-void test_context_functions_edge_cases(void) {
+void test_context_functions_edge_cases() {
     printf("\n--- Testing Context Functions Edge Cases ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Scheduler should already be initialized by previous tests
     
     // Test with NULL PCB (should not crash)
     process_save_context(NULL);
@@ -524,7 +595,7 @@ void test_context_functions_edge_cases(void) {
 // ------------------------------------------------------------
 // Main Test Function
 // ------------------------------------------------------------
-void test_actly_bifs_main(void) {
+void test_actly_bifs_main() {
     printf("\n=== ACTLY BIF FUNCTIONS TEST SUITE ===\n");
     
     test_process_save_context_basic();

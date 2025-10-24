@@ -53,7 +53,7 @@ extern uint64_t test_failed_count;
 // ------------------------------------------------------------
 // test_scheduler_runner_main — Scheduler-only test runner entry point
 // ------------------------------------------------------------
-int test_scheduler_runner_main(void) {
+void test_scheduler_runner_main() {
     printf("\n========================================\n");
     printf("    SCHEDULER UNIT TEST RUNNER\n");
     printf("========================================\n");
@@ -86,7 +86,7 @@ int test_scheduler_runner_main(void) {
 // ------------------------------------------------------------
 // main — Program entry point
 // ------------------------------------------------------------
-int main(void) {
+int main() {
     printf("[test_scheduler] Starting scheduler test mode\n");
     
     int result = test_scheduler_runner_main();

@@ -74,13 +74,23 @@ typedef struct {
     uint64_t last_scheduled; // Offset 376: Last scheduled timestamp (8 bytes)
     uint64_t affinity_mask; // Offset 384: CPU affinity mask (8 bytes)
     uint64_t migration_count; // Offset 392: Migration count (8 bytes)
-    // Total size: 400 bytes (matches PCB_SIZE)
+    uint64_t stack_pointer;   // Offset 400: Current stack pointer (bump allocator) (8 bytes)
+    uint64_t stack_limit;     // Offset 408: Stack limit (8 bytes)
+    uint64_t heap_pointer;   // Offset 416: Current heap pointer (bump allocator) (8 bytes)
+    uint64_t heap_limit;      // Offset 424: Heap limit (8 bytes)
+    uint64_t blocking_reason; // Offset 432: Blocking reason code (8 bytes)
+    uint64_t blocking_data;   // Offset 440: Blocking-specific data (8 bytes)
+    uint64_t wake_time;       // Offset 448: Timer wake time (8 bytes)
+    uint64_t message_pattern; // Offset 456: Receive pattern (8 bytes)
+    uint64_t pcb_size;        // Offset 464: Total PCB size (8 bytes)
+    uint64_t padding[6];      // Offset 472: Padding to align to 512 bytes (48 bytes)
+    // Total size: 512 bytes (matches PCB_SIZE)
 } mock_process_t;
 
 // ------------------------------------------------------------
 // test_process_state_get_set — Test basic state get/set
 // ------------------------------------------------------------
-void test_process_state_get_set(void) {
+void test_process_state_get_set() {
     printf("\n--- Testing Process State Get/Set (Task 2.4) ---\n");
     
     mock_process_t process;
@@ -122,7 +132,7 @@ void test_process_state_get_set(void) {
 // ------------------------------------------------------------
 // test_process_state_transitions — Test state transition validation
 // ------------------------------------------------------------
-void test_process_state_transitions(void) {
+void test_process_state_transitions() {
     printf("\n--- Testing Process State Transitions (Task 2.4) ---\n");
     
     mock_process_t process;
@@ -170,7 +180,7 @@ void test_process_state_transitions(void) {
 // ------------------------------------------------------------
 // test_invalid_state_transitions — Test invalid state transitions
 // ------------------------------------------------------------
-void test_invalid_state_transitions(void) {
+void test_invalid_state_transitions() {
     printf("\n--- Testing Invalid State Transitions (Task 2.4) ---\n");
     
     mock_process_t process;
@@ -227,7 +237,7 @@ void test_invalid_state_transitions(void) {
 // ------------------------------------------------------------
 // test_process_runnable_check — Test process runnable check
 // ------------------------------------------------------------
-void test_process_runnable_check(void) {
+void test_process_runnable_check() {
     printf("\n--- Testing Process Runnable Check (Task 2.4) ---\n");
     
     mock_process_t process;
@@ -273,7 +283,7 @@ void test_process_runnable_check(void) {
 // ------------------------------------------------------------
 // test_process_state_management — Main test function
 // ------------------------------------------------------------
-void test_process_state_management(void) {
+void test_process_state_management() {
     printf("\n========================================\n");
     printf("Testing Process State Management (Task 2.4)\n");
     printf("========================================\n");

@@ -30,26 +30,29 @@
 #include <stdio.h>
 
 // External assembly functions
-extern void* get_scheduler_state(uint64_t core_id);
+extern void* scheduler_state_init(uint64_t max_cores);
+extern void scheduler_state_destroy(void* scheduler_states);
+extern void* get_scheduler_state(void* scheduler_states, uint64_t core_id);
 extern void* get_priority_queue(void* state, uint64_t priority);
 extern uint64_t scheduler_get_queue_length_from_queue(void* queue);
 extern uint64_t scheduler_get_queue_length_queue_ptr(void* queue);
 
 // External test framework functions
+extern const uint64_t MAX_CORES_CONST;
 extern void test_assert_equal(uint64_t expected, uint64_t actual, const char* test_name);
 extern void test_assert_not_null(void* ptr, const char* test_name);
 extern void test_pass(const char* test_name);
 extern void test_fail(uint64_t expected, uint64_t actual, const char* test_name);
 
 // Forward declarations for test functions
-void test_scheduler_get_queue_length_from_queue(void);
-void test_scheduler_get_queue_length_queue_ptr(void);
-void test_scheduler_queue_length_consistency(void);
+void test_scheduler_get_queue_length_from_queue();
+void test_scheduler_get_queue_length_queue_ptr();
+void test_scheduler_queue_length_consistency();
 
 // ------------------------------------------------------------
 // test_scheduler_queue_length — Main test function
 // ------------------------------------------------------------
-void test_scheduler_queue_length(void) {
+void test_scheduler_queue_length() {
     printf("\n--- Testing scheduler queue length functions (Pure Assembly) ---\n");
     
     test_scheduler_get_queue_length_from_queue();
@@ -60,11 +63,18 @@ void test_scheduler_queue_length(void) {
 // ------------------------------------------------------------
 // test_scheduler_get_queue_length_from_queue — Test _scheduler_get_queue_length_from_queue
 // ------------------------------------------------------------
-void test_scheduler_get_queue_length_from_queue(void) {
+void test_scheduler_get_queue_length_from_queue() {
     printf("\n--- Testing _scheduler_get_queue_length_from_queue ---\n");
     
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
     // Get scheduler state for core 0
-    void* state = get_scheduler_state(0);
+    void* state = get_scheduler_state(scheduler_state, 0);
     test_assert_not_null(state, "scheduler_get_queue_length_from_queue_state_not_null");
     
     if (state != NULL) {
@@ -83,16 +93,26 @@ void test_scheduler_get_queue_length_from_queue(void) {
             }
         }
     }
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // test_scheduler_get_queue_length_queue_ptr — Test _scheduler_get_queue_length_queue_ptr
 // ------------------------------------------------------------
-void test_scheduler_get_queue_length_queue_ptr(void) {
+void test_scheduler_get_queue_length_queue_ptr() {
     printf("\n--- Testing _scheduler_get_queue_length_queue_ptr ---\n");
     
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
     // Get scheduler state for core 0
-    void* state = get_scheduler_state(0);
+    void* state = get_scheduler_state(scheduler_state, 0);
     test_assert_not_null(state, "scheduler_get_queue_length_queue_ptr_state_not_null");
     
     if (state != NULL) {
@@ -111,16 +131,26 @@ void test_scheduler_get_queue_length_queue_ptr(void) {
             }
         }
     }
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // test_scheduler_queue_length_consistency — Test consistency between the two functions
 // ------------------------------------------------------------
-void test_scheduler_queue_length_consistency(void) {
+void test_scheduler_queue_length_consistency() {
     printf("\n--- Testing scheduler queue length consistency ---\n");
     
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
     // Get scheduler state for core 0
-    void* state = get_scheduler_state(0);
+    void* state = get_scheduler_state(scheduler_state, 0);
     test_assert_not_null(state, "scheduler_queue_length_consistency_state_not_null");
     
     if (state != NULL) {
@@ -140,4 +170,7 @@ void test_scheduler_queue_length_consistency(void) {
             }
         }
     }
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }

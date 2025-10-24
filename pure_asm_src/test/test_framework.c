@@ -30,16 +30,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
-
-// External assembly functions
-extern void scheduler_init(uint64_t core_id);
-extern void* scheduler_get_current_process(uint64_t core_id);
-extern void scheduler_set_current_process(uint64_t core_id, void* process);
-extern uint64_t scheduler_get_reduction_count(uint64_t core_id);
-extern void scheduler_set_reduction_count(uint64_t core_id, uint64_t count);
-extern uint64_t scheduler_get_core_id(void);
-extern void* get_scheduler_state(uint64_t core_id);
-extern void* get_priority_queue(void* state, uint64_t priority);
+#include <stdlib.h>
 
 // External constants from assembly
 extern const uint64_t MAX_CORES_CONST;
@@ -51,10 +42,11 @@ extern const uint64_t SCHEDULER_SIZE_CONST;
 // Forward declarations
 void test_pass(const char* test_name);
 void test_fail(uint64_t expected, uint64_t actual, const char* test_name);
+void test_cleanup(void);
 
 // Test framework constants
-#define MAX_TESTS 200
-#define TEST_NAME_LENGTH 64
+#define MAX_TESTS 1000  // Increased to handle more tests
+#define TEST_NAME_LENGTH 128  // Increased for longer test names
 
 // Test result structure
 typedef struct {
@@ -64,12 +56,13 @@ typedef struct {
     uint64_t actual;
 } test_result_t;
 
-// Test framework state
-static test_result_t test_results[MAX_TESTS];
+// Test framework state - use dynamic allocation to avoid stack issues
+static test_result_t* test_results = NULL;
 static uint64_t test_count = 0;
 static uint64_t test_passed_count = 0;
 uint64_t test_failed_count = 0;  // Global for test_runner access
 static uint64_t current_test_index = 0;
+static uint64_t max_tests_allocated = 0;
 
 // ------------------------------------------------------------
 // test_init — Initialize test framework
@@ -79,6 +72,16 @@ void test_init(void) {
     test_passed_count = 0;
     test_failed_count = 0;
     current_test_index = 0;
+    
+    // Allocate memory for test results if not already allocated
+    if (test_results == NULL) {
+        test_results = malloc(MAX_TESTS * sizeof(test_result_t));
+        if (test_results == NULL) {
+            printf("ERROR: Failed to allocate memory for test results\n");
+            return;
+        }
+        max_tests_allocated = MAX_TESTS;
+    }
 }
 
 // ------------------------------------------------------------
@@ -125,6 +128,11 @@ void test_assert_not_zero(uint64_t value, const char* test_name) {
     }
 }
 
+// Alias for compatibility
+void test_assert_nonzero(uint64_t value, const char* test_name) {
+    test_assert_not_zero(value, test_name);
+}
+
 // ------------------------------------------------------------
 // test_assert_true — Assert value is non-zero (true)
 // ------------------------------------------------------------
@@ -169,7 +177,13 @@ void test_assert_null(void* ptr, const char* test_name) {
 // test_pass — Record a passing test
 // ------------------------------------------------------------
 void test_pass(const char* test_name) {
-    if (current_test_index >= MAX_TESTS) {
+    if (test_results == NULL) {
+        printf("ERROR: Test framework not initialized\n");
+        return;
+    }
+    
+    if (current_test_index >= max_tests_allocated) {
+        printf("WARNING: Maximum number of tests reached, skipping test: %s\n", test_name);
         return;
     }
     
@@ -189,7 +203,13 @@ void test_pass(const char* test_name) {
 // test_fail — Record a failing test
 // ------------------------------------------------------------
 void test_fail(uint64_t expected, uint64_t actual, const char* test_name) {
-    if (current_test_index >= MAX_TESTS) {
+    if (test_results == NULL) {
+        printf("ERROR: Test framework not initialized\n");
+        return;
+    }
+    
+    if (current_test_index >= max_tests_allocated) {
+        printf("WARNING: Maximum number of tests reached, skipping test: %s\n", test_name);
         return;
     }
     
@@ -209,7 +229,10 @@ void test_fail(uint64_t expected, uint64_t actual, const char* test_name) {
 // test_print_results — Print test results summary
 // ------------------------------------------------------------
 void test_print_results(void) {
+    
     printf("\n=== Test Results ===\n");
+    fflush(stdout);
+    
     printf("Total Assertions: %llu\n", test_passed_count + test_failed_count);
     printf("Assertions Passed: %llu\n", test_passed_count);
     printf("Assertions Failed: %llu\n", test_failed_count);
@@ -217,9 +240,9 @@ void test_print_results(void) {
     printf("========================\n");
     
     // Print failed test details
-    if (test_failed_count > 0) {
+    if (test_failed_count > 0 && test_results != NULL) {
         printf("\nFailed Tests:\n");
-        for (uint64_t i = 0; i < current_test_index; i++) {
+        for (uint64_t i = 0; i < current_test_index && i < max_tests_allocated; i++) {
             if (!test_results[i].passed) {
                 printf("  - %s (expected: %llu, actual: %llu)\n", 
                        test_results[i].name, 
@@ -228,4 +251,21 @@ void test_print_results(void) {
             }
         }
     }
+    
+}
+
+// ------------------------------------------------------------
+// test_cleanup — Clean up test framework memory
+// ------------------------------------------------------------
+void test_cleanup(void) {
+    if (test_results != NULL) {
+        free(test_results);
+        test_results = NULL;
+        max_tests_allocated = 0;
+    }
+    
+    test_count = 0;
+    test_passed_count = 0;
+    test_failed_count = 0;
+    current_test_index = 0;
 }

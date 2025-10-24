@@ -50,7 +50,7 @@ extern uint64_t test_failed_count;
 // External test function
 extern void test_process_state_management(void);
 
-int main(void) {
+int main() {
     printf("Starting individual test: process_state_management\n");
     
     // Initialize test framework

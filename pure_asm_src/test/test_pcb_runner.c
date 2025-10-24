@@ -46,7 +46,7 @@ extern uint64_t test_failed_count;
 // ------------------------------------------------------------
 // test_pcb_runner_main — PCB-only test runner entry point
 // ------------------------------------------------------------
-int test_pcb_runner_main(void) {
+void test_pcb_runner_main() {
     printf("\n========================================\n");
     printf("    PCB UNIT TEST RUNNER\n");
     printf("========================================\n");
@@ -73,7 +73,7 @@ int test_pcb_runner_main(void) {
 // ------------------------------------------------------------
 // main — Program entry point
 // ------------------------------------------------------------
-int main(void) {
+int main() {
     printf("[test_pcb] Starting PCB test mode\n");
     
     int result = test_pcb_runner_main();

@@ -47,7 +47,7 @@ extern void test_assert_not_equal(uint64_t expected, uint64_t actual, const char
 // ------------------------------------------------------------
 // test_expand_memory_pool_basic — Test basic pool expansion
 // ------------------------------------------------------------
-void test_expand_memory_pool_basic(void) {
+void test_expand_memory_pool_basic() {
     printf("\n--- Testing expand_memory_pool (Basic Functionality) ---\n");
     
     // Use dynamic memory allocation to create a pool that can be expanded
@@ -90,7 +90,7 @@ void test_expand_memory_pool_basic(void) {
 // ------------------------------------------------------------
 // test_expand_memory_pool_invalid_params — Test invalid parameters
 // ------------------------------------------------------------
-void test_expand_memory_pool_invalid_params(void) {
+void test_expand_memory_pool_invalid_params() {
     printf("\n--- Testing expand_memory_pool (Invalid Parameters) ---\n");
     
     // Test NULL pool_base
@@ -110,7 +110,7 @@ void test_expand_memory_pool_invalid_params(void) {
 // ------------------------------------------------------------
 // test_expand_memory_pool_limits — Test expansion limits
 // ------------------------------------------------------------
-void test_expand_memory_pool_limits(void) {
+void test_expand_memory_pool_limits() {
     printf("\n--- Testing expand_memory_pool (Expansion Limits) ---\n");
     
     static uint8_t test_pool[640]; // 10 blocks of 64 bytes
@@ -127,7 +127,7 @@ void test_expand_memory_pool_limits(void) {
 // ------------------------------------------------------------
 // test_expand_memory_pool_different_sizes — Test different block sizes
 // ------------------------------------------------------------
-void test_expand_memory_pool_different_sizes(void) {
+void test_expand_memory_pool_different_sizes() {
     printf("\n--- Testing expand_memory_pool (Different Block Sizes) ---\n");
     
     // Test with small blocks (8 bytes) - will fail due to static memory contiguity
@@ -144,7 +144,7 @@ void test_expand_memory_pool_different_sizes(void) {
 // ------------------------------------------------------------
 // test_expand_memory_pool_edge_cases — Test edge cases
 // ------------------------------------------------------------
-void test_expand_memory_pool_edge_cases(void) {
+void test_expand_memory_pool_edge_cases() {
     printf("\n--- Testing expand_memory_pool (Edge Cases) ---\n");
     
     static uint8_t test_pool[64]; // 1 block of 64 bytes
@@ -161,7 +161,7 @@ void test_expand_memory_pool_edge_cases(void) {
 // ------------------------------------------------------------
 // test_expand_memory_pool — Main test function for memory pool expansion
 // ------------------------------------------------------------
-void test_expand_memory_pool(void) {
+void test_expand_memory_pool() {
     printf("\n========================================\n");
     printf("Testing Memory Pool Expansion (Task 2.4)\n");
     printf("========================================\n");

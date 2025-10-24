@@ -53,52 +53,38 @@ void* create_test_pcb() {
 }
 
 int main() {
-    printf("Testing _trigger_garbage_collection with valid PCB...\n");
-    
     // Test 1: NULL PCB (should return 0)
-    printf("Test 1: NULL PCB - ");
     int result = trigger_garbage_collection(NULL);
-    if (result == 0) {
-        printf("✓ Returned 0 as expected\n");
-    } else {
-        printf("✗ Unexpected result: %d\n", result);
+    if (result != 0) {
+        printf("✗ NULL PCB returned unexpected result: %d\n", result);
+        return 1;
     }
     
     // Test 2: Valid PCB (should return 1)
-    printf("Test 2: Valid PCB - ");
     void* pcb = create_test_pcb();
     if (pcb == NULL) {
         printf("✗ Failed to create test PCB\n");
         return 1;
     }
     
-    // Check initial state
-    uint64_t initial_stack_ptr = *(uint64_t*)((char*)pcb + PCB_STACK_POINTER_OFFSET);
-    uint64_t initial_heap_ptr = *(uint64_t*)((char*)pcb + PCB_HEAP_POINTER_OFFSET);
-    printf("Initial stack pointer: 0x%llx\n", initial_stack_ptr);
-    printf("Initial heap pointer: 0x%llx\n", initial_heap_ptr);
-    
     // Call garbage collection
     result = trigger_garbage_collection(pcb);
-    if (result == 1) {
-        printf("✓ GC returned 1 (success)\n");
-        
-        // Check if pointers were reset
-        uint64_t final_stack_ptr = *(uint64_t*)((char*)pcb + PCB_STACK_POINTER_OFFSET);
-        uint64_t final_heap_ptr = *(uint64_t*)((char*)pcb + PCB_HEAP_POINTER_OFFSET);
-        uint64_t stack_base = *(uint64_t*)((char*)pcb + PCB_STACK_BASE_OFFSET);
-        uint64_t heap_base = *(uint64_t*)((char*)pcb + PCB_HEAP_BASE_OFFSET);
-        
-        printf("Final stack pointer: 0x%llx (base: 0x%llx)\n", final_stack_ptr, stack_base);
-        printf("Final heap pointer: 0x%llx (base: 0x%llx)\n", final_heap_ptr, heap_base);
-        
-        if (final_stack_ptr == stack_base && final_heap_ptr == heap_base) {
-            printf("✓ Pointers were reset to base addresses\n");
-        } else {
-            printf("✗ Pointers were not reset correctly\n");
-        }
-    } else {
+    if (result != 1) {
         printf("✗ GC returned %d (expected 1)\n", result);
+        free(pcb);
+        return 1;
+    }
+    
+    // Check if pointers were reset
+    uint64_t final_stack_ptr = *(uint64_t*)((char*)pcb + PCB_STACK_POINTER_OFFSET);
+    uint64_t final_heap_ptr = *(uint64_t*)((char*)pcb + PCB_HEAP_POINTER_OFFSET);
+    uint64_t stack_base = *(uint64_t*)((char*)pcb + PCB_STACK_BASE_OFFSET);
+    uint64_t heap_base = *(uint64_t*)((char*)pcb + PCB_HEAP_BASE_OFFSET);
+    
+    if (final_stack_ptr != stack_base || final_heap_ptr != heap_base) {
+        printf("✗ Pointers were not reset correctly\n");
+        free(pcb);
+        return 1;
     }
     
     free(pcb);

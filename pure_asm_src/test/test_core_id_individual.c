@@ -50,7 +50,7 @@ extern uint64_t test_failed_count;
 // External test function
 extern void test_scheduler_core_id(void);
 
-int main(void) {
+int main() {
     printf("Starting individual test: scheduler_core_id\n");
     
     // Initialize test framework

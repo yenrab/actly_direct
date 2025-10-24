@@ -39,31 +39,33 @@
 #include <stdlib.h>
 
 // External assembly functions
-extern int process_yield_check(uint64_t core_id, void* pcb);
-extern void* process_preempt(uint64_t core_id, void* pcb);
-extern int process_decrement_reductions_with_check(uint64_t core_id);
-extern void* process_yield(uint64_t core_id, void* pcb);
-extern int process_yield_conditional(uint64_t core_id, void* pcb);
-extern int scheduler_enqueue_process(uint64_t core_id, void* process, uint64_t priority);
-extern void* scheduler_schedule(uint64_t core_id);
+extern void* scheduler_state_init(uint64_t max_cores);
+extern void scheduler_state_destroy(void* scheduler_states);
+extern int process_yield_check(void* scheduler_states, uint64_t core_id, void* pcb);
+extern void* process_preempt(void* scheduler_states, uint64_t core_id, void* pcb);
+extern int process_decrement_reductions_with_check(void* scheduler_states, uint64_t core_id);
+extern void* process_yield_with_state(void* scheduler_states, uint64_t core_id, void* pcb);
+extern int process_yield_conditional_with_state(void* scheduler_states, uint64_t core_id, void* pcb);
+extern int scheduler_enqueue_process(void* scheduler_states, uint64_t core_id, void* process, uint64_t priority);
+extern void* scheduler_schedule(void* scheduler_states, uint64_t core_id);
 extern void* process_block(uint64_t core_id, void* pcb, uint64_t reason);
-extern int process_wake(uint64_t core_id, void* pcb);
-extern void* process_block_on_receive(uint64_t core_id, void* pcb, uint64_t pattern);
-extern int process_block_on_timer(uint64_t core_id, void* pcb, uint64_t timeout_ticks);
-extern int process_block_on_io(uint64_t core_id, void* pcb, uint64_t io_descriptor);
+extern int process_wake(void* scheduler_states, uint64_t core_id, void* pcb);
+extern void* process_block_on_receive(void* scheduler_states, uint64_t core_id, void* pcb, uint64_t pattern);
+extern int process_block_on_timer(void* scheduler_states, uint64_t core_id, void* pcb, uint64_t timeout_ticks);
+extern int process_block_on_io(void* scheduler_states, uint64_t core_id, void* pcb, uint64_t io_descriptor);
 extern uint64_t process_check_timer_wakeups(uint64_t core_id);
 extern int actly_yield(uint64_t core_id);
 extern uint64_t actly_spawn(uint64_t core_id, uint64_t entry_point, uint64_t priority, uint64_t stack_size, uint64_t heap_size);
 extern void actly_exit(uint64_t core_id, uint64_t exit_reason);
-extern int actly_bif_trap_check(uint64_t core_id, uint64_t reduction_cost);
+extern int actly_bif_trap_check(void* scheduler_states, uint64_t core_id, uint64_t reduction_cost);
 
 // External scheduler functions
-extern void scheduler_init(uint64_t core_id);
-extern void* scheduler_get_current_process(uint64_t core_id);
-extern void scheduler_set_current_process(uint64_t core_id, void* process);
-extern uint64_t scheduler_get_reduction_count(uint64_t core_id);
-extern void scheduler_set_reduction_count(uint64_t core_id, uint64_t count);
-extern int scheduler_enqueue_process(uint64_t core_id, void* process, uint64_t priority);
+extern void scheduler_init(void* scheduler_states, uint64_t core_id);
+extern void* scheduler_get_current_process(void* scheduler_states, uint64_t core_id);
+extern void scheduler_set_current_process(void* scheduler_states, uint64_t core_id, void* process);
+extern uint64_t scheduler_get_reduction_count(void* scheduler_states, uint64_t core_id);
+extern void scheduler_set_reduction_count_with_state(void* scheduler_states, uint64_t core_id, uint64_t count);
+extern int scheduler_enqueue_process(void* scheduler_states, uint64_t core_id, void* process, uint64_t priority);
 
 // External process functions
 extern void* process_create(uint64_t entry_point, uint64_t priority, uint64_t stack_size, uint64_t heap_size);
@@ -82,6 +84,7 @@ extern void test_assert_zero(uint64_t value, const char* test_name);
 extern void test_assert_not_zero(uint64_t value, const char* test_name);
 
 // External constants
+extern const uint64_t MAX_CORES_CONST;
 extern const uint64_t DEFAULT_REDUCTIONS;
 extern const uint64_t PROCESS_STATE_READY;
 extern const uint64_t PROCESS_STATE_RUNNING;
@@ -157,11 +160,18 @@ void* create_integration_test_process(uint64_t pid, uint64_t priority, uint64_t 
 // ------------------------------------------------------------
 // Test Yield with Scheduling Integration
 // ------------------------------------------------------------
-void test_integration_yield_with_scheduling(void) {
+void test_integration_yield_with_scheduling() {
     printf("\n--- Testing Yield with Scheduling Integration ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create multiple test processes
     void* pcb1 = create_integration_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
@@ -173,68 +183,88 @@ void test_integration_yield_with_scheduling(void) {
     test_assert_not_zero((uint64_t)pcb3, "test_process3_creation");
     
     // Set first process as current
-    scheduler_set_current_process(0, pcb1);
+    scheduler_set_current_process(scheduler_state, 0, pcb1);
     
     // Add other processes to ready queue
-    scheduler_enqueue_process(0, pcb2, PRIORITY_NORMAL);
-    scheduler_enqueue_process(0, pcb3, PRIORITY_HIGH);
+    scheduler_enqueue_process(scheduler_state, 0, pcb2, PRIORITY_NORMAL);
+    scheduler_enqueue_process(scheduler_state, 0, pcb3, PRIORITY_HIGH);
     
     // Test yield with multiple processes
-    void* next_process = process_yield(0, pcb1);
+    void* next_process = process_yield_with_state(scheduler_state, 0, pcb1);
     test_assert_not_zero((uint64_t)next_process, "yield_with_multiple_processes");
     
     // Cleanup
     free(pcb1);
     free(pcb2);
     free(pcb3);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Preemption at Reduction Limit
 // ------------------------------------------------------------
-void test_preemption_at_reduction_limit(void) {
+void test_preemption_at_reduction_limit() {
     printf("\n--- Testing Preemption at Reduction Limit ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_integration_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
     
     // Test preemption at reduction limit
-    scheduler_set_reduction_count(0, 1);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 1);
     
     // First decrement should continue
-    int result = process_decrement_reductions_with_check(0);
+    int result = process_decrement_reductions_with_check(scheduler_state, 0);
     test_assert_equal(0, result, "preemption_first_decrement");
     
     // Second decrement should preempt
-    result = process_decrement_reductions_with_check(0);
+    result = process_decrement_reductions_with_check(scheduler_state, 0);
     test_assert_equal(1, result, "preemption_second_decrement");
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Block-Wake Cycle
 // ------------------------------------------------------------
-void test_integration_block_wake_cycle(void) {
+void test_integration_block_wake_cycle() {
     printf("\n--- Testing Block-Wake Cycle ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_integration_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
     
     // Test multiple block-wake cycles
     for (int i = 0; i < 3; i++) {
@@ -247,7 +277,7 @@ void test_integration_block_wake_cycle(void) {
         test_assert_equal(PROCESS_STATE_WAITING, state, "block_cycle_state");
         
         // Wake process
-        int wake_result = process_wake(0, pcb);
+        int wake_result = process_wake(scheduler_state, 0, pcb);
         test_assert_equal(1, wake_result, "wake_cycle");
         
         // Verify READY state
@@ -257,16 +287,26 @@ void test_integration_block_wake_cycle(void) {
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Multiple Processes Yielding
 // ------------------------------------------------------------
-void test_multiple_processes_yielding(void) {
+void test_multiple_processes_yielding() {
     printf("\n--- Testing Multiple Processes Yielding ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create multiple test processes
     void* pcb1 = create_integration_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
@@ -278,48 +318,58 @@ void test_multiple_processes_yielding(void) {
     test_assert_not_zero((uint64_t)pcb3, "test_process3_creation");
     
     // Set first process as current
-    scheduler_set_current_process(0, pcb1);
+    scheduler_set_current_process(scheduler_state, 0, pcb1);
     
     // Add other processes to ready queue
-    scheduler_enqueue_process(0, pcb2, PRIORITY_NORMAL);
-    scheduler_enqueue_process(0, pcb3, PRIORITY_HIGH);
+    scheduler_enqueue_process(scheduler_state, 0, pcb2, PRIORITY_NORMAL);
+    scheduler_enqueue_process(scheduler_state, 0, pcb3, PRIORITY_HIGH);
     
     // Test yield from first process
-    void* next_process = process_yield(0, pcb1);
+    void* next_process = process_yield_with_state(scheduler_state, 0, pcb1);
     test_assert_not_zero((uint64_t)next_process, "yield_from_first_process");
     
     // Test yield from second process
-    next_process = process_yield(0, pcb2);
+    next_process = process_yield_with_state(scheduler_state, 0, pcb2);
     test_assert_not_zero((uint64_t)next_process, "yield_from_second_process");
     
     // Test yield from third process
-    next_process = process_yield(0, pcb3);
+    next_process = process_yield_with_state(scheduler_state, 0, pcb3);
     test_assert_not_zero((uint64_t)next_process, "yield_from_third_process");
     
     // Cleanup
     free(pcb1);
     free(pcb2);
     free(pcb3);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Spawn-Yield-Exit Lifecycle
 // ------------------------------------------------------------
-void test_integration_spawn_yield_exit_lifecycle(void) {
+void test_integration_spawn_yield_exit_lifecycle() {
     printf("\n--- Testing Spawn-Yield-Exit Lifecycle ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create test process
     void* pcb = create_integration_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
     // Set as current process
-    scheduler_set_current_process(0, pcb);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
     
     // Set sufficient reduction count
-    scheduler_set_reduction_count(0, 50);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 50);
     
     // Test spawn operation
     uint64_t new_pid = actly_spawn(0, 0x1000, PRIORITY_NORMAL, 8192, 4096);
@@ -334,16 +384,26 @@ void test_integration_spawn_yield_exit_lifecycle(void) {
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Complete Yielding Behavior
 // ------------------------------------------------------------
-void test_complete_yielding_behavior(void) {
+void test_complete_yielding_behavior() {
     printf("\n--- Testing Complete Yielding Behavior ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create multiple test processes
     void* pcb1 = create_integration_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
@@ -355,26 +415,26 @@ void test_complete_yielding_behavior(void) {
     test_assert_not_zero((uint64_t)pcb3, "test_process3_creation");
     
     // Set first process as current
-    scheduler_set_current_process(0, pcb1);
+    scheduler_set_current_process(scheduler_state, 0, pcb1);
     
     // Add other processes to ready queue
-    scheduler_enqueue_process(0, pcb2, PRIORITY_HIGH);
-    scheduler_enqueue_process(0, pcb3, PRIORITY_NORMAL);
+    scheduler_enqueue_process(scheduler_state, 0, pcb2, PRIORITY_HIGH);
+    scheduler_enqueue_process(scheduler_state, 0, pcb3, PRIORITY_NORMAL);
     
     // Test reduction-based preemption
-    scheduler_set_reduction_count(0, 1);
-    int result = process_decrement_reductions_with_check(0);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 1);
+    int result = process_decrement_reductions_with_check(scheduler_state, 0);
     test_assert_equal(0, result, "reduction_preemption_continue");
     
-    result = process_decrement_reductions_with_check(0);
+    result = process_decrement_reductions_with_check(scheduler_state, 0);
     test_assert_equal(1, result, "reduction_preemption_yield");
     
     // Test voluntary yield
-    void* next_process = process_yield(0, pcb1);
+    void* next_process = process_yield_with_state(scheduler_state, 0, pcb1);
     test_assert_not_zero((uint64_t)next_process, "voluntary_yield");
     
     // Test conditional yield
-    result = process_yield_conditional(0, pcb2);
+    result = process_yield_conditional_with_state(scheduler_state, 0, pcb2);
     test_assert_equal(1, result, "conditional_yield");
     
     // Test blocking operations
@@ -382,11 +442,11 @@ void test_complete_yielding_behavior(void) {
     test_assert_zero((uint64_t)next_process, "block_operation");
     
     // Test wake operation
-    int wake_result = process_wake(0, pcb3);
+    int wake_result = process_wake(scheduler_state, 0, pcb3);
     test_assert_equal(1, wake_result, "wake_operation");
     
     // Test Actly BIF functions
-    scheduler_set_reduction_count(0, 20);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 20);
     int bif_result = actly_yield(0);
     test_assert_equal(1, bif_result, "actly_yield_bif");
     
@@ -397,42 +457,55 @@ void test_complete_yielding_behavior(void) {
     free(pcb1);
     free(pcb2);
     free(pcb3);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Test Error Handling and Edge Cases
 // ------------------------------------------------------------
-void test_error_handling_and_edge_cases(void) {
+void test_error_handling_and_edge_cases() {
     printf("\n--- Testing Error Handling and Edge Cases ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Test with invalid core ID
-    int result = process_yield_check(128, NULL);
+    int result = process_yield_check(scheduler_state, 128, NULL);
     test_assert_equal(0, result, "invalid_core_id");
     
     // Test with invalid PCB
-    result = process_yield_check(0, NULL);
+    result = process_yield_check(scheduler_state, 0, NULL);
     test_assert_equal(0, result, "invalid_pcb");
     
     // Test with no current process
-    scheduler_set_current_process(0, NULL);
-    result = process_decrement_reductions_with_check(0);
+    scheduler_set_current_process(scheduler_state, 0, NULL);
+    result = process_decrement_reductions_with_check(scheduler_state, 0);
     test_assert_equal(0, result, "no_current_process");
     
     // Test with insufficient reductions
     void* pcb = create_integration_test_process(1, PRIORITY_NORMAL, PROCESS_STATE_RUNNING);
     test_assert_not_zero((uint64_t)pcb, "test_process_creation");
     
-    scheduler_set_current_process(0, pcb);
-    scheduler_set_reduction_count(0, 0);
+    scheduler_set_current_process(scheduler_state, 0, pcb);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 0);
     
-    result = process_decrement_reductions_with_check(0);
+    result = process_decrement_reductions_with_check(scheduler_state, 0);
     test_assert_equal(1, result, "insufficient_reductions");
     
     // Cleanup
     free(pcb);
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
@@ -441,11 +514,18 @@ void test_error_handling_and_edge_cases(void) {
 // ------------------------------------------------------------
 // test_integration_yield_scheduling — Test integration of yield with scheduling
 // ------------------------------------------------------------
-void test_integration_yield_scheduling(void) {
+void test_integration_yield_scheduling() {
     printf("\n--- Testing Integration of Yield with Scheduling ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Create multiple test processes
     typedef struct {
@@ -485,15 +565,15 @@ void test_integration_yield_scheduling(void) {
         pcb2->size = sizeof(test_pcb_t);
         
         // Test enqueueing processes
-        int result1 = scheduler_enqueue_process(0, pcb1, 2);
-        int result2 = scheduler_enqueue_process(0, pcb2, 2);
+        int result1 = scheduler_enqueue_process(scheduler_state, 0, pcb1, 2);
+        int result2 = scheduler_enqueue_process(scheduler_state, 0, pcb2, 2);
         
         test_assert_not_zero(result1, "scheduler_enqueue_process should succeed for pcb1");
         test_assert_not_zero(result2, "scheduler_enqueue_process should succeed for pcb2");
         
         // Test yielding
-        scheduler_set_current_process(0, pcb1);
-        void* next = process_yield(0, pcb1);
+        scheduler_set_current_process(scheduler_state, 0, pcb1);
+        void* next = process_yield_with_state(scheduler_state, 0, pcb1);
         test_assert_not_zero((uint64_t)next, "process_yield should return a valid next process");
         
         // Cleanup
@@ -502,28 +582,41 @@ void test_integration_yield_scheduling(void) {
     }
     
     printf("✓ Integration yield with scheduling tests passed\n");
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // test_integration_multiple_processes — Test integration with multiple processes
 // ------------------------------------------------------------
-void test_integration_multiple_processes(void) {
+void test_integration_multiple_processes() {
     printf("\n--- Testing Integration with Multiple Processes ---\n");
     
-    // Initialize scheduler
-    scheduler_init(0);
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     // Test scheduler_schedule with no processes
-    void* result = scheduler_schedule(0);
+    void* result = scheduler_schedule(scheduler_state, 0);
     test_assert_equal((uint64_t)result, 0, "scheduler_schedule with no processes should return NULL");
     
     printf("✓ Multiple processes integration tests passed\n");
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }
 
 // ------------------------------------------------------------
 // Main Test Function
 // ------------------------------------------------------------
-void test_integration_yielding_main(void) {
+void test_integration_yielding_main() {
     printf("\n=== INTEGRATION YIELDING TEST SUITE ===\n");
     
     test_integration_yield_scheduling();

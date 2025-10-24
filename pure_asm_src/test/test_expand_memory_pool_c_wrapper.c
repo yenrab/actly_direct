@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 // C implementation of expand_memory_pool that uses C library functions
-int expand_memory_pool_c_wrapper(void* pool_base, uint32_t current_size, uint32_t block_size, uint32_t expansion_size) {
+void expand_memory_pool_c_wrapper() {
     // Validate input parameters
     if (pool_base == NULL) {
         return 0;
@@ -54,7 +54,7 @@ int expand_memory_pool_c_wrapper(void* pool_base, uint32_t current_size, uint32_
     return 1; // Success
 }
 
-int main(void) {
+int main() {
     printf("=== Testing C Wrapper for Memory Pool Expansion ===\n");
     
     // Test 1: Basic functionality

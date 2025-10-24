@@ -45,7 +45,7 @@ extern uint64_t scheduler_get_queue_length_queue_ptr(void* queue);
 // Test functions
 extern void test_scheduler_queue_length(void);
 
-int main(void) {
+int main() {
     printf("Running scheduler queue length individual test...\n");
     
     test_scheduler_queue_length();

@@ -52,10 +52,7 @@ void* create_test_pcb() {
 }
 
 int main() {
-    printf("Testing BEAM-style bump allocator functions...\n");
-    
     // Test 1: Basic stack allocation
-    printf("Test 1: Basic stack allocation...\n");
     void* pcb = create_test_pcb();
     if (pcb == NULL) {
         printf("✗ Failed to create test PCB\n");
@@ -63,16 +60,10 @@ int main() {
     }
     
     void* result = process_allocate_stack(pcb, 1024);
-    if (result != NULL) {
-        printf("✓ Stack allocated at: %p\n", result);
-        printf("✓ Expected address: 0x2000\n");
-        if (result == (void*)0x2000) {
-            printf("✓ Address matches expected\n");
-        } else {
-            printf("✗ Address mismatch\n");
-        }
-    } else {
+    if (result == NULL || result != (void*)0x2000) {
         printf("✗ Stack allocation failed\n");
+        free(pcb);
+        return 1;
     }
     
     free(pcb);

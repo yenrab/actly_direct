@@ -31,7 +31,7 @@
 extern void* allocate_pcb(void);
 extern uint64_t free_pcb(void* pcb);
 
-int main(void) {
+int main() {
     printf("Testing basic PCB allocation and deallocation...\n");
     
     // Test allocating a single PCB

@@ -175,7 +175,7 @@ void test_multiple_core_scheduler(void) {
 // ------------------------------------------------------------
 // test_process_integration_final_main — Main integration test runner
 // ------------------------------------------------------------
-int test_process_integration_final_main(void) {
+void test_process_integration_final_main() {
     printf("\n========================================\n");
     printf("    PROCESS INTEGRATION TEST RUNNER\n");
     printf("========================================\n");
@@ -195,7 +195,7 @@ int test_process_integration_final_main(void) {
 // ------------------------------------------------------------
 // main — Program entry point
 // ------------------------------------------------------------
-int main(void) {
+int main() {
     printf("[integration] Starting process integration tests\n");
     
     // Initialize test framework

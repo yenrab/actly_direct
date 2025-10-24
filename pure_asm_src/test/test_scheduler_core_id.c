@@ -38,13 +38,13 @@ extern void test_fail(uint64_t expected, uint64_t actual, const char* test_name)
 extern const uint64_t MAX_CORES_CONST;
 
 // Forward declarations for test functions
-void test_scheduler_get_core_id_basic(void);
-void test_scheduler_get_core_id_consistency(void);
+void test_scheduler_get_core_id_basic();
+void test_scheduler_get_core_id_consistency();
 
 // ------------------------------------------------------------
 // test_scheduler_core_id — Main test function
 // ------------------------------------------------------------
-void test_scheduler_core_id(void) {
+void test_scheduler_core_id() {
     printf("\n--- Testing scheduler get_core_id (Pure Assembly) ---\n");
     
     test_scheduler_get_core_id_basic();
@@ -54,7 +54,7 @@ void test_scheduler_core_id(void) {
 // ------------------------------------------------------------
 // test_scheduler_get_core_id_basic — Test basic core ID functionality
 // ------------------------------------------------------------
-void test_scheduler_get_core_id_basic(void) {
+void test_scheduler_get_core_id_basic() {
     // Test that get_core_id returns a value (not necessarily 0)
     uint64_t core_id = scheduler_get_core_id();
     
@@ -70,7 +70,7 @@ void test_scheduler_get_core_id_basic(void) {
 // ------------------------------------------------------------
 // test_scheduler_get_core_id_consistency — Test core ID consistency
 // ------------------------------------------------------------
-void test_scheduler_get_core_id_consistency(void) {
+void test_scheduler_get_core_id_consistency() {
     // Test that get_core_id returns consistent values
     uint64_t core_id1 = scheduler_get_core_id();
     uint64_t core_id2 = scheduler_get_core_id();

@@ -87,7 +87,7 @@ extern void test_assert_null(void* ptr, const char* test_name);
 extern void test_assert_true(int condition, const char* test_name);
 
 // Test entry point
-void test_process_control_block(void);
+void test_process_control_block();
 
 
 // ------------------------------------------------------------
@@ -100,7 +100,7 @@ void test_process_control_block(void);
 // Author: Lee Barney
 // Last Modified: 2025-01-19
 //
-void test_process_destroy_null(void) {
+void test_process_destroy_null() {
     printf("\n--- Testing process_destroy_null ---\n");
     
     // Test destroying NULL PCB
@@ -118,7 +118,7 @@ void test_process_destroy_null(void) {
 // Author: Lee Barney
 // Last Modified: 2025-01-19
 //
-void test_process_field_access(void) {
+void test_process_field_access() {
     printf("\n--- Testing process_field_access ---\n");
     
     void* pcb = process_create(0x1000, 2, 0);
@@ -173,7 +173,7 @@ void test_process_field_access(void) {
 // Author: Lee Barney
 // Last Modified: 2025-01-19
 //
-void test_process_field_access_null(void) {
+void test_process_field_access_null() {
     printf("\n--- Testing process_field_access_null ---\n");
     
     // Test all getter functions with NULL PCB
@@ -225,7 +225,7 @@ void test_process_field_access_null(void) {
 // Author: Lee Barney
 // Last Modified: 2025-01-19
 //
-void test_stack_allocation(void) {
+void test_stack_allocation() {
     printf("\n--- Testing stack_allocation ---\n");
     
     void* stacks[10];
@@ -277,7 +277,7 @@ void test_stack_allocation(void) {
 // Author: Lee Barney
 // Last Modified: 2025-01-19
 //
-void test_context_switching(void) {
+void test_context_switching() {
     printf("\n--- Testing context_switching ---\n");
     
     void* pcb = process_create(0x1000, 2, 0);
@@ -309,7 +309,7 @@ void test_context_switching(void) {
 // Author: Lee Barney
 // Last Modified: 2025-01-19
 //
-void test_constants_access(void) {
+void test_constants_access() {
     printf("\n--- Testing constants_access ---\n");
     
     // Test stack and heap size constants
@@ -343,7 +343,7 @@ void test_constants_access(void) {
 // Author: Lee Barney
 // Last Modified: 2025-01-19
 //
-void test_process_control_block(void) {
+void test_process_control_block() {
     printf("\n=== Process Control Block (PCB) Tests ===\n");
     
     // Run all test functions

@@ -51,7 +51,7 @@ void* create_test_pcb() {
 }
 
 // Test 1: Basic stack allocation
-int test_basic_stack_allocation() {
+void test_basic_stack_allocation() {
     printf("Test 1: Basic stack allocation...\n");
     
     void* pcb = create_test_pcb();
@@ -84,7 +84,7 @@ int test_basic_stack_allocation() {
 }
 
 // Test 2: Multiple stack allocations
-int test_multiple_stack_allocations() {
+void test_multiple_stack_allocations() {
     printf("Test 2: Multiple stack allocations...\n");
     
     void* pcb = create_test_pcb();
@@ -124,7 +124,7 @@ int test_multiple_stack_allocations() {
 }
 
 // Test 3: Basic heap allocation
-int test_basic_heap_allocation() {
+void test_basic_heap_allocation() {
     printf("Test 3: Basic heap allocation...\n");
     
     void* pcb = create_test_pcb();
@@ -157,7 +157,7 @@ int test_basic_heap_allocation() {
 }
 
 // Test 4: Stack exhaustion
-int test_stack_exhaustion() {
+void test_stack_exhaustion() {
     printf("Test 4: Stack exhaustion...\n");
     
     void* pcb = create_test_pcb();
@@ -181,7 +181,7 @@ int test_stack_exhaustion() {
 }
 
 // Test 5: Heap exhaustion
-int test_heap_exhaustion() {
+void test_heap_exhaustion() {
     printf("Test 5: Heap exhaustion...\n");
     
     void* pcb = create_test_pcb();
@@ -205,7 +205,7 @@ int test_heap_exhaustion() {
 }
 
 // Test 6: Null PCB handling
-int test_null_pcb_handling() {
+void test_null_pcb_handling() {
     printf("Test 6: Null PCB handling...\n");
     
     // Try to allocate with NULL PCB

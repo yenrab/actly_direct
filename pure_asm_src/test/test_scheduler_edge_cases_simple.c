@@ -41,11 +41,14 @@
 #include <stdio.h>
 
 // External assembly functions
-extern void scheduler_init(uint64_t core_id);
-extern void* scheduler_get_current_process(uint64_t core_id);
-extern void scheduler_set_current_process(uint64_t core_id, void* process);
-extern uint64_t scheduler_get_reduction_count(uint64_t core_id);
-extern void scheduler_set_reduction_count(uint64_t core_id, uint64_t count);
+extern void* scheduler_state_init(uint64_t max_cores);
+extern void scheduler_state_destroy(void* scheduler_states);
+extern void scheduler_init(void* scheduler_states, uint64_t core_id);
+extern void* scheduler_get_current_process(void* scheduler_states, uint64_t core_id);
+extern void scheduler_set_current_process(void* scheduler_states, uint64_t core_id, void* process);
+extern uint64_t scheduler_get_reduction_count(void* scheduler_states, uint64_t core_id);
+extern void scheduler_set_reduction_count_with_state(void* scheduler_states, uint64_t core_id, uint64_t count);
+extern uint64_t scheduler_get_reduction_count_with_state(void* scheduler_states, uint64_t core_id);
 
 // External constants
 extern const uint64_t MAX_CORES_CONST;
@@ -58,45 +61,57 @@ extern void test_assert_zero(uint64_t value, const char* test_name);
 // ------------------------------------------------------------
 // test_scheduler_edge_cases_simple — Simple edge case tests
 // ------------------------------------------------------------
-void test_scheduler_edge_cases_simple(void) {
+void test_scheduler_edge_cases_simple() {
     printf("\n--- Testing Scheduler Edge Cases (Simple) ---\n");
+    
+    // Create isolated scheduler state
+    void* scheduler_state = scheduler_state_init(1);
+    if (scheduler_state == NULL) {
+        printf("ERROR: Failed to create scheduler state\n");
+        return;
+    }
+    
+    // Initialize scheduler for core 0
+    scheduler_init(scheduler_state, 0);
     
     //Test with invalid core ID
     printf("Testing invalid core ID...\n");
-    void* process = scheduler_get_current_process(MAX_CORES_CONST);
+    void* process = scheduler_get_current_process(scheduler_state, MAX_CORES_CONST);
     test_assert_zero((uint64_t)process, "scheduler_get_current_process_invalid_core");
     
     // Test with very large core ID (may return garbage, that's OK)
     printf("Testing very large core ID...\n");
-    process = scheduler_get_current_process(0xFFFFFFFFFFFFFFFFULL);
+    process = scheduler_get_current_process(scheduler_state, 0xFFFFFFFFFFFFFFFFULL);
     // Don't assert - this may return garbage values, which is acceptable
     printf("Very large core ID returned: %llu (may be garbage)\n", (uint64_t)process);
     
     // Test setting current process to NULL
     printf("Testing NULL process...\n");
-    scheduler_init(0);
-    scheduler_set_current_process(0, NULL);
-    process = scheduler_get_current_process(0);
+    scheduler_set_current_process(scheduler_state, 0, NULL);
+    process = scheduler_get_current_process(scheduler_state, 0);
     test_assert_zero((uint64_t)process, "scheduler_set_current_process_null");
     
     // Test boundary values for reduction count
     printf("Testing reduction count boundary values...\n");
-    scheduler_set_reduction_count(0, 0);
-    uint64_t count = scheduler_get_reduction_count(0);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 0);
+    uint64_t count = scheduler_get_reduction_count_with_state(scheduler_state, 0);
     test_assert_zero(count, "scheduler_reduction_count_zero");
     
-    scheduler_set_reduction_count(0, 1);
-    count = scheduler_get_reduction_count(0);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 1);
+    count = scheduler_get_reduction_count_with_state(scheduler_state, 0);
     test_assert_equal(1, count, "scheduler_reduction_count_one");
     
-    scheduler_set_reduction_count(0, DEFAULT_REDUCTIONS);
-    count = scheduler_get_reduction_count(0);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, DEFAULT_REDUCTIONS);
+    count = scheduler_get_reduction_count_with_state(scheduler_state, 0);
     test_assert_equal(DEFAULT_REDUCTIONS, count, "scheduler_reduction_count_default");
     
     // Test maximum 32-bit value
-    scheduler_set_reduction_count(0, 0xFFFFFFFFULL);
-    count = scheduler_get_reduction_count(0);
+    scheduler_set_reduction_count_with_state(scheduler_state, 0, 0xFFFFFFFFULL);
+    count = scheduler_get_reduction_count_with_state(scheduler_state, 0);
     test_assert_equal(0xFFFFFFFFULL, count, "scheduler_reduction_count_max_32bit");
     
     printf("✓ Simple edge case tests completed\n");
+    
+    // Clean up scheduler state
+    scheduler_state_destroy(scheduler_state);
 }

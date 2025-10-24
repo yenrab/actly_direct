@@ -50,7 +50,7 @@ extern uint64_t test_failed_count;
 // External test function
 extern void test_scheduler_edge_cases_simple(void);
 
-int main(void) {
+int main() {
     printf("Starting individual test: scheduler_edge_cases_simple\n");
     
     // Initialize test framework
