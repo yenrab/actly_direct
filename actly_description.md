@@ -62,56 +62,190 @@ protocol ConsensusVoter:
 ##Behavior Templates
 Used by the programmer to implement all behavior in the system
 **Map** Change All <data structure> by <calculation>
+**Programmer Input**:
+- Change All userList by adding 1 to age
+- Change All orderItems by multiplying price by 1.1
+- Change All sensorReadings by adding 273 to temperature
+- Change All userTuples by adding 1 to age
+**Core Erlang Translation**:
+```erlang
+let
+  ProcessedData = lists:map(fun (Item) -> <calculation> end, <data structure>)
+in
+  ProcessedData
+```
 **Filter** Pick From <data structure> with <calculation>
+**Programmer Input**:
+- Pick From users with age greater than 18
+- Pick From orderItems with price less than 100
+- Pick From sensorReadings with temperature greater than 25
+- Pick From userTuples with {name, age, email} where age greater than 18
+**Core Erlang Translation**:
+```erlang
+let
+  FilteredData = [Item || Item <- <data structure>, <calculation>]
+in
+  FilteredData
+```
 **Reduce** Combine <data structure> into <result> using <calculation>
+**Programmer Input**:
+- Combine orderItems into totalCost using addition
+- Combine userList into sumAge using addition
+- Combine sensorReadings into totalTemperature using addition
+- Combine userTuples into totalAge using addition of {name, age, email}
+**Core Erlang Translation**:
+```erlang
+let
+  Result = lists:foldl(fun (Item, Acc) -> <calculation> end, InitialValue, <data structure>)
+in
+  Result
+```
 **For Each** With Each of the <data structure> <calculation>
+**Programmer Input**:
+- With Each of the users add 1 to count
+- With Each of the orderItems multiply price by 1.05
+- With Each of the sensorReadings add 1 to readingCount
+- With Each of the userTuples add 1 to {name, age, email}
+**Core Erlang Translation**:
+```erlang
+let
+  _ = lists:foreach(fun (Item) -> <calculation> end, <data structure>)
+in
+  ok
+```
 **Variable Declaration** Tag <some_value> with <some_label>
-**Peak** Peak into <data structure> and tag<some tag or tags> 
+**Programmer Input**:
+- Tag userCount with totalUsers
+- Tag currentTime with timestamp
+- Tag calculationResult with finalValue
+- Tag {name, age, email} with userProfile
+**Core Erlang Translation**:
+```erlang
+let
+  <some_label> = <some_value>
+in
+  % Use <some_label> in subsequent expressions
+```
+**Peak** Peak into <data structure> and tag<some tag or tags>
+**Programmer Input**:
+- Peak into userList and tag firstUser and lastUser
+- Peak into orderItems and tag totalCount and averagePrice
+- Peak into sensorReadings and tag currentValue and status
+- Peak into userTuples and tag firstTuple and lastTuple
+**Core Erlang Translation**:
+```erlang
+let
+  <some_tag> = <data structure>
+in
+  % Use <some_tag> without modifying original structure
+``` 
 **Message** Send <message> to <name>
+**Programmer Input**:
+- Send {@vote, participantId} to voteCollector
+- Send {@timeout, requestId} to timeoutHandler
+- Send {@result, calculationData} to resultProcessor
+- Send {userProfile, {name, age, email}} to userProcessor
+**Core Erlang Translation**:
+```erlang
+let
+  _ = <name> ! <message>
+in
+  ok
+```
 **State Update** Keep <value>
+**Programmer Input**:
+- Keep {active, userCount}
+- Keep {processing, currentTask}
+- Keep {completed, finalResult}
+- Keep {userProfile, {name, age, email}}
+**Core Erlang Translation**:
+```erlang
+% In gen_server callbacks, return new state:
+{reply, Result, <value>}  % for handle_call
+{noreply, <value>}         % for handle_cast
+```
 **Write to Physical Storage** store <value> in <name>
+**Programmer Input**:
+- store userData in userDatabase
+- store configuration in settingsFile
+- store logs in auditTrail
+- store {userProfile, {name, age, email}} in userDatabase
+**Core Erlang Translation**:
+```erlang
+let
+  Result = file:write_file(<name>, <value>)
+in
+  Result
+```
 **FindIn** FindIn <data structure> using <operation>
+**Programmer Input**:
+- FindIn userList using age greater than 21
+- FindIn orderItems using price greater than 50
+- FindIn sensorReadings using temperature equality 25
+- FindIn userTuples using {name, age, email} where age greater than 21
+**Core Erlang Translation**:
+```erlang
+let
+  Result = lists:search(fun (Item) -> <operation> end, <data structure>)
+in
+  Result
+```
 **Zip** Zip <data structure1> with <data structure2> using <operation>
+**Programmer Input**:
+- Zip userNames with userAges using create user profile
+- Zip orderIds with orderTotals using create order summary
+- Zip sensorIds with sensorValues using create sensor reading
+- Zip userNames with userAges using create {name, age, email}
+**Core Erlang Translation**:
+```erlang
+let
+  Zipped = lists:zipwith(fun (Item1, Item2) -> <operation> end, <data structure1>, <data structure2>)
+in
+  Zipped
+```
 **Unzip** Unzip <data structure> into <structure1> and <structure2>
+**Programmer Input**:
+- Unzip userProfiles into userNames and userAges
+- Unzip orderSummaries into orderIds and orderTotals
+- Unzip sensorReadings into sensorIds and sensorValues
+- Unzip userTuples into {name, age} and {email, status}
+**Core Erlang Translation**:
+```erlang
+let
+  {<structure1>, <structure2>} = lists:unzip(<data structure>)
+in
+  {<structure1>, <structure2>}
+```
 **Tuple Decomposition** match <data> and tag <tuple pattern>
+**Programmer Input**:
+- match userData and tag {name, age, email}
+- match orderInfo and tag {orderId, total, status}
+- match sensorData and tag {sensorId, value, timestamp}
+- match userTuple and tag {name, age, email, status}
+**Core Erlang Translation**:
+```erlang
+let
+  <tuple_pattern> = <data>
+in
+  % Use decomposed tuple elements
+```
 
 ##Match Template and Translation
 
 ###Conditional Branching
 **Purpose**: Pattern matching to decide in a case-like manner what is to be done when a match occures. Matches must be makeable between types, values, and have a catch-all available as well.
 
-**Programmer Input**
 
-####Exact Value Matching
-**Actly Form**: `match <value> with <exact_value>`
-**Examples**:
-- `match status with @active`
-- `match count with 0`
-- `match message with @timeout`
-
-####Pattern Matching with Guards
-**Actly Form**: `match <pattern> with <value> when <condition>`
-**Examples**:
-- `match {status, count} with {Status, Count} when Count > 0`
-- `match message with {@vote, Data} when Data /= null`
-- `match state with @processing when timeout < 5000`
-
-####Type-Based Matching
-**Actly Form**: `match <value> as <type>`
-**Examples**:
-- `match data as String`
-- `match result as Number`
-- `match payload as Dictionary`
-
-####Catch-All Matching
-**Actly Form**: `otherwise`
-**Examples**:
-- `otherwise`
 
 **Core Erlang Translation**
 
 ####Exact Value Matching
-**Actly Form**: `check if <value> is <exact_value> then <action> otherwise <default_action>`
+**Programmer Input**: `check if <value> is <exact_value> then <action> otherwise <default_action>`
+**Examples**:
+- `check if status is active then processActiveState() otherwise handleInactiveState()`
+- `check if count is 0 then resetCounter() otherwise incrementCounter()`
+- `check if message is timeout then handleTimeout() otherwise processMessage()`
+
 **Core Erlang Translation**:
 ```erlang
 case <value> of
@@ -125,7 +259,12 @@ end
 ```
 
 ####Pattern Matching with Guards
-**Actly Form**: `check if <value> is <pattern> and <condition> then <action> otherwise <default_action>`
+**Programmer Input**: `check if <value> is <pattern> and <condition> then <action> otherwise <default_action>`
+**Examples**:
+- `check if message is {@vote, participantId} and participantId /= null then send {@acknowledged, participantId} to voteCollector otherwise send {@error, invalid_participant} to errorHandler`
+- `check if state is {Status, Count} and Count > 0 then processStatus(Status) otherwise handleEmptyState()`
+- `check if data is {Name, Age} and Age >= 18 then registerAdult(Name) otherwise registerMinor(Name)`
+
 **Core Erlang Translation**:
 ```erlang
 case <value> of
@@ -139,7 +278,12 @@ end
 ```
 
 ####Type-Based Matching
-**Actly Form**: `check if <value> is a <type> then <action> otherwise <default_action>`
+**Programmer Input**: `check if <value> is a <type> then <action> otherwise <default_action>`
+**Examples**:
+- `check if data is a String then processText(data) otherwise handleNonText(data)`
+- `check if result is a Number then calculateResult(result) otherwise handleNonNumeric(result)`
+- `check if payload is a Dictionary then extractKeys(payload) otherwise handleNonDictionary(payload)`
+
 **Core Erlang Translation**:
 ```erlang
 case <value> of
@@ -153,7 +297,7 @@ end
 ```
 
 ####Complex Multi-Pattern Matching
-**Actly Form**: 
+**Programmer Input**: 
 ```
 check if <value> is <pattern1> then <action1>
 check if <value> is <pattern2> then <action2>
@@ -177,24 +321,6 @@ case <value> of
     DefaultResult
 end
 ```
-
-####Nested Pattern Matching
-**Actly Form**: `check if <value> is {<pattern1>, <pattern2>} and <condition> then <action> otherwise <default_action>`
-**Core Erlang Translation**:
-```erlang
-case <value> of
-  {<pattern1>, <pattern2>} when <condition> ->
-    % Handle nested pattern match
-    Result;
-  _ ->
-    % Handle no match
-    DefaultResult
-end
-```
-
-
-
-
 
 
 
@@ -867,3 +993,68 @@ When translating user descriptions to Core Erlang, follow this step-by-step proc
     **logical not** (not)
     **modulo** (%)
     **exponentiation** (**)
+
+##Actor Definition Syntax
+
+###Natural Language Style
+**Purpose**: Provide an English-like, conversational syntax for defining actors that is optimized for LLM understanding and code generation.
+
+**Syntax**: `I want an actor called ActorName that is a ProcessType which behavior`
+
+**Examples**:
+- `I want an actor called VoteCounter that is a Responder which receives votes and returns the current count`
+- `I want an actor called DoorLock that is a Morpher which starts locked and unlocks with a key`
+- `I want an actor called TemperatureSensor that is a Bridger which reads temperature from hardware`
+
+**Advantages for LLM Code Generation**:
+- **Natural language processing**: LLMs excel at understanding conversational descriptions
+- **Flexible interpretation**: Can handle variations in phrasing ("I need", "Create", "Build an actor called")
+- **Contextual understanding**: LLMs can infer intent and missing details from natural descriptions
+- **Error tolerance**: Natural language is more forgiving of minor variations
+- **Self-documenting**: The description explains what the actor does
+- **Easier for programmers**: More conversational, less formal syntax to remember
+
+**Core Erlang Translation Process**:
+1. **Parse natural language** to identify actor name, type, and behavior
+2. **Map to process type template** (Responder, Doer, Morpher, etc.)
+3. **Extract behavior patterns** using behavior templates
+4. **Generate Core Erlang** using process scaffolding templates
+5. **Handle message protocols** using message handling patterns
+
+**Example Translation**:
+```
+User Input: "I want an actor called VoteCounter that is a Responder which receives votes and returns the current count"
+
+LLM Analysis:
+- Actor Name: VoteCounter
+- Process Type: Responder
+- Behavior: receives votes, returns count
+- Message Types: {vote, participantId} -> {count, voteCount}
+
+Generated Core Erlang:
+module vote_counter
+  export [start_link/1, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]
+  
+  function start_link/1 = fun (Args) ->
+    gen_server:start_link({local, vote_counter}, vote_counter, Args, [])
+  end
+  
+  function init/1 = fun (Args) ->
+    InitialState = {0},
+    {ok, InitialState}
+  end
+  
+  function handle_call/3 = fun (Request, From, State) ->
+    case Request of
+      {vote, ParticipantId} ->
+        let
+          {CurrentCount} = State,
+          NewCount = CurrentCount + 1
+        in
+          {reply, {count, NewCount}, {NewCount}};
+      _ ->
+        {reply, {error, unknown_request}, State}
+    end
+  end
+end
+```
