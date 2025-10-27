@@ -45,7 +45,7 @@ extern void scheduler_state_destroy(void* scheduler_states);
 extern const uint64_t MAX_CORES;
 extern const uint64_t WORK_STEAL_ENABLED;
 extern const uint64_t MIN_STEAL_QUEUE_SIZE;
-extern const uint64_t MAX_MIGRATIONS_PER_PROCESS;
+extern const uint64_t MAX_MIGRATIONS;
 
 // Forward declarations for test functions
 static void test_try_steal_work();
@@ -271,7 +271,7 @@ void test_work_stealing_migration_limits() {
     printf("Testing work stealing migration limits...\n");
     
     // Test migration limits configuration
-    test_assert_equal(100, MAX_MIGRATIONS_PER_PROCESS, "migration_limit_config");
+    test_assert_equal(10, MAX_MIGRATIONS, "migration_limit_config");
     
     // Test minimum steal queue size configuration
     test_assert_equal(2, MIN_STEAL_QUEUE_SIZE, "min_steal_queue_size_config");

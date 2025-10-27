@@ -538,7 +538,6 @@ process_yield_with_state:
     b _process_yield_with_state
 
 _process_yield_with_state:
-    // BINARY SEARCH: Comment out first half of function
     // Save callee-saved registers
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
@@ -564,7 +563,6 @@ _process_yield_with_state:
     mul x22, x20, x22
     add x23, x19, x22  // x23 = scheduler state address (keep PCB in x21)
 
-    // BINARY SEARCH DEBUG: Testing first part of second half
     // Save process context
     mov x0, x21  // pcb (use original PCB pointer)
     bl _process_save_context
@@ -580,7 +578,6 @@ _process_yield_with_state:
     // Get process priority
     ldr x26, [x21, #pcb_priority]  // Use PCB pointer for PCB fields
 
-    // BINARY SEARCH DEBUG: Testing enqueue operation only
     // Enqueue process to back of its priority queue
     mov x0, x19  // scheduler_states
     mov x1, x20  // core_id
@@ -588,7 +585,6 @@ _process_yield_with_state:
     mov x3, x26  // priority
     bl _scheduler_enqueue_process
 
-    // BINARY SEARCH DEBUG: Testing schedule operation
     // Increment scheduler yield statistics
     ldr x26, [x23, #scheduler_total_yields]  // Use scheduler state for scheduler fields
     add x26, x26, #1
@@ -600,7 +596,6 @@ _process_yield_with_state:
     bl _scheduler_schedule
     mov x27, x0  // Save next process pointer
 
-    // BINARY SEARCH DEBUG: Testing context restore operation
     // If next process available, restore its context
     cbz x27, yield_with_state_no_next_process
     mov x0, x27  // pcb
@@ -615,15 +610,6 @@ _process_yield_with_state:
     ldp x19, x20, [sp], #16
     ret
     
-    // BINARY SEARCH DEBUG: Return early to test first half
-    mov x0, #0  // Return NULL for now
-    ldp x27, x30, [sp], #16
-    ldp x25, x26, [sp], #16
-    ldp x23, x24, [sp], #16
-    ldp x21, x22, [sp], #16
-    ldp x19, x20, [sp], #16
-    ret
-
 yield_with_state_no_next_process:
     // No next process available, return NULL
     mov x0, #0

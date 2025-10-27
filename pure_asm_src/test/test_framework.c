@@ -44,6 +44,11 @@ void test_pass(const char* test_name);
 void test_fail(uint64_t expected, uint64_t actual, const char* test_name);
 void test_cleanup(void);
 
+// External memory isolation functions (defined in test_yielding.c)
+extern void force_memory_cleanup(void);
+extern void validate_memory_state(const char* test_name);
+extern void reset_global_state(void);
+
 // Test framework constants
 #define MAX_TESTS 1000  // Increased to handle more tests
 #define TEST_NAME_LENGTH 128  // Increased for longer test names
@@ -68,10 +73,17 @@ static uint64_t max_tests_allocated = 0;
 // test_init — Initialize test framework
 // ------------------------------------------------------------
 void test_init(void) {
+    // MEMORY ISOLATION: Reset global state before initialization
+    reset_global_state();
+    validate_memory_state("test_init_start");
+    
     test_count = 0;
     test_passed_count = 0;
     test_failed_count = 0;
     current_test_index = 0;
+    
+    // MEMORY ISOLATION: Force memory cleanup before allocation
+    force_memory_cleanup();
     
     // Allocate memory for test results if not already allocated
     if (test_results == NULL) {
@@ -82,6 +94,9 @@ void test_init(void) {
         }
         max_tests_allocated = MAX_TESTS;
     }
+    
+    // MEMORY ISOLATION: Validate memory state after allocation
+    validate_memory_state("test_init_after_allocation");
 }
 
 // ------------------------------------------------------------
@@ -177,6 +192,9 @@ void test_assert_null(void* ptr, const char* test_name) {
 // test_pass — Record a passing test
 // ------------------------------------------------------------
 void test_pass(const char* test_name) {
+    // MEMORY ISOLATION: Validate parameters before processing
+    validate_memory_state("test_pass_start");
+    
     if (test_results == NULL) {
         printf("ERROR: Test framework not initialized\n");
         return;
@@ -187,12 +205,22 @@ void test_pass(const char* test_name) {
         return;
     }
     
+    // MEMORY ISOLATION: Force memory cleanup before storing
+    force_memory_cleanup();
+    
     test_result_t* result = &test_results[current_test_index];
-    strncpy(result->name, test_name, TEST_NAME_LENGTH - 1);
-    result->name[TEST_NAME_LENGTH - 1] = '\0';
+    
+    // Store values immediately to prevent corruption
     result->passed = true;
     result->expected = 0;
     result->actual = 0;
+    
+    // Copy test name safely
+    strncpy(result->name, test_name, TEST_NAME_LENGTH - 1);
+    result->name[TEST_NAME_LENGTH - 1] = '\0';
+    
+    // MEMORY ISOLATION: Validate after storing
+    validate_memory_state("test_pass_after_store");
     
     current_test_index++;
     test_passed_count++;
@@ -203,6 +231,9 @@ void test_pass(const char* test_name) {
 // test_fail — Record a failing test
 // ------------------------------------------------------------
 void test_fail(uint64_t expected, uint64_t actual, const char* test_name) {
+    // MEMORY ISOLATION: Validate parameters before processing
+    validate_memory_state("test_fail_start");
+    
     if (test_results == NULL) {
         printf("ERROR: Test framework not initialized\n");
         return;
@@ -213,12 +244,32 @@ void test_fail(uint64_t expected, uint64_t actual, const char* test_name) {
         return;
     }
     
+    // MEMORY ISOLATION: Force memory cleanup before storing
+    force_memory_cleanup();
+    
     test_result_t* result = &test_results[current_test_index];
+    
+    // Store values immediately to prevent corruption
+    result->passed = false;
+    result->expected = expected;  // Store immediately
+    result->actual = actual;      // Store immediately
+    
+    // Copy test name safely
     strncpy(result->name, test_name, TEST_NAME_LENGTH - 1);
     result->name[TEST_NAME_LENGTH - 1] = '\0';
-    result->passed = false;
-    result->expected = expected;
-    result->actual = actual;
+    
+    // MEMORY ISOLATION: Validate after storing
+    validate_memory_state("test_fail_after_store");
+    
+    // Verify stored values haven't been corrupted
+    if (result->expected != expected) {
+        printf("ERROR: Expected value corrupted in test_fail: stored=0x%llx, original=0x%llx\n", 
+               result->expected, expected);
+    }
+    if (result->actual != actual) {
+        printf("ERROR: Actual value corrupted in test_fail: stored=0x%llx, original=0x%llx\n", 
+               result->actual, actual);
+    }
     
     current_test_index++;
     test_failed_count++;

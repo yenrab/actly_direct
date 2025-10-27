@@ -108,7 +108,7 @@
     // Work stealing constants
     .global _WORK_STEAL_ENABLED
     .global _MIN_STEAL_QUEUE_SIZE
-    .global _MAX_MIGRATIONS_PER_PROCESS
+    .global _MAX_MIGRATIONS
 
 // ------------------------------------------------------------
 // Scheduler Configuration Constants
@@ -215,8 +215,8 @@ _WORK_STEAL_ENABLED:
 _MIN_STEAL_QUEUE_SIZE:
     .quad 2    // Don't steal if queue has < 2 processes
 
-_MAX_MIGRATIONS_PER_PROCESS:
-    .quad 100  // Max migrations per process
+_MAX_MIGRATIONS:
+    .quad 10   // Max migrations per process
 
 // Compatibility aliases for test functions
 _scheduler_get_queue_length_compat:
@@ -594,7 +594,8 @@ _scheduler_idle:
     str x22, [x21, #scheduler_idle_count]
 
     // Attempt work stealing
-    mov x0, x20  // Pass core ID
+    mov x0, x19  // Pass scheduler_states pointer
+    mov x1, x20  // Pass core ID
     bl _try_steal_work
 
     // Check if we stole work
@@ -1434,5 +1435,104 @@ scheduler_get_current_failed_with_state:
 scheduler_set_current_done_with_state:
     ret
 
+// ------------------------------------------------------------
+// Scheduler Main Loop
+// ------------------------------------------------------------
+// Main scheduler loop that integrates all subsystems.
+// Processes timers, messages, scheduling, and load balancing.
+//
+// Parameters:
+//   None
+//
+// Returns:
+//   None (infinite loop)
+//
+// Complexity: O(1) per iteration
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+    .global _scheduler_main_loop
+_scheduler_main_loop:
+    // Save callee-saved registers
+    stp x19, x30, [sp, #-16]!
+    stp x20, x21, [sp, #-16]!
 
+scheduler_main_loop_iteration:
+    // Phase 1: Process timers
+    bl _timer_tick
+
+    // Phase 2: Process messages
+    bl _process_messages
+
+    // Phase 3: Schedule next process
+    bl _scheduler_schedule
+
+    // Phase 4: Check load balancing (periodic)
+    bl _check_load_balance
+
+    // Continue loop
+    b scheduler_main_loop_iteration
+
+    // Should never reach here
+    ldp x20, x21, [sp], #16
+    ldp x19, x30, [sp], #16
+    ret
+
+// ------------------------------------------------------------
+// Process Messages
+// ------------------------------------------------------------
+// Process incoming messages for all cores.
+//
+// Parameters:
+//   None
+//
+// Returns:
+//   None
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+_process_messages:
+    // Save callee-saved registers
+    stp x19, x30, [sp, #-16]!
+
+    // Process messages (simplified implementation)
+    // In a full implementation, this would:
+    // - Check for incoming messages
+    // - Wake up blocked processes
+    // - Update message queues
+
+    ldp x19, x30, [sp], #16
+    ret
+
+// ------------------------------------------------------------
+// Check Load Balance
+// ------------------------------------------------------------
+// Periodic load balancing check.
+//
+// Parameters:
+//   None
+//
+// Returns:
+//   None
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+_check_load_balance:
+    // Save callee-saved registers
+    stp x19, x30, [sp, #-16]!
+
+    // Check load balance (simplified implementation)
+    // In a full implementation, this would:
+    // - Check if load balancing is needed
+    // - Trigger work stealing if necessary
+    // - Update load balancing statistics
+
+    ldp x19, x30, [sp], #16
+    ret
 

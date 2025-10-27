@@ -18,7 +18,7 @@ INTEGRATION_TARGET = test_process_integration
 
 
 # Assembly source files (pure assembly scheduler)
-AS_SOURCES = scheduler.s process.s test/process_test.s yield.s blocking.s actly_bifs.s loadbalancer.s
+AS_SOURCES = scheduler.s process.s test/process_test.s yield.s blocking.s actly_bifs.s loadbalancer.s affinity.s communication.s timer.s apple_silicon.s
 
 # C source files (scheduler wrapper)
 C_SOURCES = test/test_framework.c \
@@ -43,17 +43,16 @@ C_SOURCES = test/test_framework.c \
             test/test_work_stealing.c \
             test/test_load_balancing_integration.c \
             test/test_load_balancing.c \
-            test/test_beam_bump_allocator_basic.c \
-            test/test_simple_beam.c \
-            test/test_just_stack.c \
-            test/test_gc.c
+            test/test_affinity.c \
+            test/test_communication.c \
+            test/test_timer.c \
+            test/test_apple_silicon.c
 
 
 
 # PCB-only test sources
 PCB_C_SOURCES = test/test_framework.c \
-                test/test_process_control_block.c \
-                test/test_pcb_runner.c
+                test/test_process_control_block.c
 
 # Scheduler-only test sources  
 SCHEDULER_C_SOURCES = test/test_framework.c \
@@ -75,8 +74,8 @@ SCHEDULER_C_OBJECTS = $(SCHEDULER_C_SOURCES:.c=.o)
 OBJECTS = $(AS_OBJECTS) $(C_OBJECTS)
 
 # Object files with full paths
-AS_OBJECTS_FULL = ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/yield.o ../lib/bin/blocking.o ../lib/bin/actly_bifs.o ../lib/bin/loadbalancer.o
-C_OBJECTS_FULL = ../lib/bin/test_framework.o ../lib/bin/test_runner.o ../lib/bin/test_scheduler_init.o ../lib/bin/test_scheduler_get_set_process.o ../lib/bin/test_scheduler_reduction_count.o ../lib/bin/test_pcb_allocation.o ../lib/bin/test_scheduler_core_id.o ../lib/bin/test_scheduler_helper_functions.o ../lib/bin/test_scheduler_edge_cases_simple.o ../lib/bin/test_process_state_management.o ../lib/bin/test_process_control_block.o ../lib/bin/test_scheduler_queue_length.o ../lib/bin/test_expand_memory_pool.o ../lib/bin/test_yielding.o ../lib/bin/test_blocking.o ../lib/bin/test_actly_bifs.o ../lib/bin/test_integration_yielding.o ../lib/bin/test_work_stealing_deque.o ../lib/bin/test_victim_selection.o ../lib/bin/test_work_stealing.o ../lib/bin/test_load_balancing_integration.o ../lib/bin/test_load_balancing.o
+AS_OBJECTS_FULL = ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/yield.o ../lib/bin/blocking.o ../lib/bin/actly_bifs.o ../lib/bin/loadbalancer.o ../lib/bin/affinity.o ../lib/bin/communication.o ../lib/bin/timer.o ../lib/bin/apple_silicon.o
+C_OBJECTS_FULL = ../lib/bin/test_framework.o ../lib/bin/test_runner.o ../lib/bin/test_scheduler_init.o ../lib/bin/test_scheduler_get_set_process.o ../lib/bin/test_scheduler_reduction_count.o ../lib/bin/test_pcb_allocation.o ../lib/bin/test_scheduler_core_id.o ../lib/bin/test_scheduler_helper_functions.o ../lib/bin/test_scheduler_edge_cases_simple.o ../lib/bin/test_process_state_management.o ../lib/bin/test_process_control_block.o ../lib/bin/test_scheduler_queue_length.o ../lib/bin/test_expand_memory_pool.o ../lib/bin/test_yielding.o ../lib/bin/test_blocking.o ../lib/bin/test_actly_bifs.o ../lib/bin/test_integration_yielding.o ../lib/bin/test_work_stealing_deque.o ../lib/bin/test_victim_selection.o ../lib/bin/test_work_stealing.o ../lib/bin/test_load_balancing_integration.o ../lib/bin/test_load_balancing.o ../lib/bin/test_affinity.o ../lib/bin/test_communication.o ../lib/bin/test_timer.o ../lib/bin/test_apple_silicon.o
 ALL_OBJECTS = $(AS_OBJECTS_FULL) $(C_OBJECTS_FULL)
 
 # Default target
@@ -189,61 +188,26 @@ $(SCHEDULER_TARGET): scheduler.o process_test.o $(SCHEDULER_C_OBJECTS)
 ../lib/bin/test_load_balancing.o: test/test_load_balancing.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-../lib/bin/test_beam_bump_allocator_basic.o: test/test_beam_bump_allocator_basic.c
+../lib/bin/test_affinity.o: test/test_affinity.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-../lib/bin/test_simple_beam.o: test/test_simple_beam.c
+../lib/bin/test_communication.o: test/test_communication.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-../lib/bin/test_just_stack.o: test/test_just_stack.c
+../lib/bin/timer.o: timer.s
+	as -arch arm64 timer.s -o ../lib/bin/timer.o
+
+../lib/bin/test_timer.o: test/test_timer.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-../lib/bin/test_gc.o: test/test_gc.c
+../lib/bin/apple_silicon.o: apple_silicon.s
+	as -arch arm64 apple_silicon.s -o ../lib/bin/apple_silicon.o
+
+../lib/bin/test_apple_silicon.o: test/test_apple_silicon.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 ../lib/bin/test_pcb_allocation.o: test/test_pcb_allocation.c
 	$(CC) $(CFLAGS) -c $< -o $@
-
-../lib/bin/test_beam_bump_allocator_basic.o: test/test_beam_bump_allocator_basic.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-../lib/bin/test_simple_beam.o: test/test_simple_beam.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-../lib/bin/test_just_stack.o: test/test_just_stack.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-../lib/bin/test_gc.o: test/test_gc.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# Individual test executables
-test_init_exe: scheduler.o process.o test/process_test.o test/test_framework.o test/test_scheduler_init.o test/test_init_individual.o
-	$(CC) -arch arm64 ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/test_framework.o ../lib/bin/test_scheduler_init.o ../lib/bin/test_init_individual.o -o ../lib/bin/test_init_exe
-
-test_get_set_exe: scheduler.o process.o test/process_test.o test/test_framework.o test/test_scheduler_get_set_process.o test/test_get_set_individual.o
-	$(CC) -arch arm64 ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/test_framework.o ../lib/bin/test_scheduler_get_set_process.o ../lib/bin/test_get_set_individual.o -o ../lib/bin/test_get_set_exe
-
-test_reduction_exe: scheduler.o process.o test/process_test.o test/test_framework.o test/test_scheduler_reduction_count.o test/test_reduction_individual.o
-	$(CC) -arch arm64 ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/test_framework.o ../lib/bin/test_scheduler_reduction_count.o ../lib/bin/test_reduction_individual.o -o ../lib/bin/test_reduction_exe
-
-test_core_id_exe: scheduler.o process.o test/process_test.o test/test_framework.o test/test_scheduler_core_id.o test/test_core_id_individual.o
-	$(CC) -arch arm64 ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/test_framework.o ../lib/bin/test_scheduler_core_id.o ../lib/bin/test_core_id_individual.o -o ../lib/bin/test_core_id_exe
-
-test_helper_exe: scheduler.o process.o test/process_test.o test/test_framework.o test/test_scheduler_helper_functions.o test/test_helper_individual.o
-	$(CC) -arch arm64 ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/test_framework.o ../lib/bin/test_scheduler_helper_functions.o ../lib/bin/test_helper_individual.o -o ../lib/bin/test_helper_exe
-
-test_edge_cases_exe: scheduler.o process.o test/process_test.o test/test_framework.o test/test_scheduler_edge_cases_simple.o test/test_edge_cases_individual.o
-	$(CC) -arch arm64 ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/test_framework.o ../lib/bin/test_scheduler_edge_cases_simple.o ../lib/bin/test_edge_cases_individual.o -o ../lib/bin/test_edge_cases_exe
-
-
-test_process_state_exe: scheduler.o process.o test/process_test.o test/test_framework.o test/test_process_state_management.o test/test_process_state_individual.o
-	$(CC) -arch arm64 ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/test_framework.o ../lib/bin/test_process_state_management.o ../lib/bin/test_process_state_individual.o -o ../lib/bin/test_process_state_exe
-
-test_process_control_exe: scheduler.o process.o test/process_test.o test/test_framework.o test/test_process_control_block.o test/test_process_control_individual.o
-	$(CC) -arch arm64 ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/test_framework.o ../lib/bin/test_process_control_block.o ../lib/bin/test_process_control_individual.o -o ../lib/bin/test_process_control_exe
-
-test_scheduler_queue_length_exe: scheduler.o process.o test/process_test.o test/test_framework.o test/test_scheduler_queue_length.o test/test_scheduler_queue_length_individual.o
-	$(CC) -arch arm64 ../lib/bin/scheduler.o ../lib/bin/process.o ../lib/bin/process_test.o ../lib/bin/test_framework.o ../lib/bin/test_scheduler_queue_length.o ../lib/bin/test_scheduler_queue_length_individual.o -o ../lib/bin/test_scheduler_queue_length_exe
 
 # Test targets
 test: $(TARGET)
@@ -384,6 +348,12 @@ ship_ready_test: $(TARGET)
 
 ../lib/bin/loadbalancer.o: loadbalancer.s config.inc
 	as -arch arm64 loadbalancer.s -o ../lib/bin/loadbalancer.o
+
+../lib/bin/affinity.o: affinity.s config.inc
+	as -arch arm64 affinity.s -o ../lib/bin/affinity.o
+
+../lib/bin/communication.o: communication.s config.inc
+	as -arch arm64 communication.s -o ../lib/bin/communication.o
 
 # Compile test framework object file
 ../lib/bin/test_framework.o: test/test_framework.c

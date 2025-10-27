@@ -94,7 +94,7 @@
     // Work stealing configuration
     .equ WORK_STEAL_ENABLED, 1           // Enable work stealing
     .equ MIN_STEAL_QUEUE_SIZE, 2         // Don't steal if queue has < 2 processes
-    .equ MAX_MIGRATIONS_PER_PROCESS, 100 // Max migrations per process
+    // .equ MAX_MIGRATIONS_PER_PROCESS, 100 // Max migrations per process (REMOVED - use MAX_MIGRATIONS instead)
     .equ STEAL_COOLDOWN_CYCLES, 10000    // Cycles between steals from same victim
     .equ LOAD_IMBALANCE_THRESHOLD, 2     // Steal if load difference > 2
     .equ STEAL_RETRY_LIMIT, 3            // Max retry attempts per steal

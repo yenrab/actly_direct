@@ -566,15 +566,13 @@ _get_scheduler_load:
     mov x20, x1  // core_id
 
     // Calculate scheduler state address
-    // DEBUG SECTION 1: Address calculation - FIXED SCHEDULER SIZE
-    mov x21, #248                    // scheduler_size = 248 (was 240)
+    mov x21, #248                    // scheduler_size = 248
     mul x21, x20, x21
     add x20, x19, x21  // x20 = scheduler state address
 
     // Initialize load to 0
     mov x21, #0  // load = 0
 
-    // DEBUG SECTION 2: MAX priority calculation - ENABLED FOR BINARY SEARCH
     // Calculate load for each priority level
     // MAX priority (weight = 4)
     add x22, x20, #8                 // Queue array base (scheduler_queues = 8)
@@ -582,7 +580,6 @@ _get_scheduler_load:
     lsl x23, x23, #2                 // Multiply by 4
     add x21, x21, x23                // load += MAX_count * 4
 
-    // DEBUG SECTION 3: HIGH priority calculation - ENABLED FOR BINARY SEARCH
     // HIGH priority (weight = 3)
     add x22, x22, #24               // Move to HIGH queue (queue_size = 24)
     ldr w23, [x22, #16]             // HIGH queue count (queue_count = 16)
@@ -590,14 +587,12 @@ _get_scheduler_load:
     mul x23, x23, x24               // Multiply by 3
     add x21, x21, x23               // load += HIGH_count * 3
 
-    // DEBUG SECTION 4: NORMAL priority calculation - ENABLED FOR BINARY SEARCH
     // NORMAL priority (weight = 2)
     add x22, x22, #24               // Move to NORMAL queue (queue_size = 24)
     ldr w23, [x22, #16]             // NORMAL queue count (queue_count = 16)
     lsl x23, x23, #1                // Multiply by 2
     add x21, x21, x23               // load += NORMAL_count * 2
 
-    // DEBUG SECTION 5: LOW priority calculation - ENABLED FOR BINARY SEARCH
     // LOW priority (weight = 1)
     add x22, x22, #24               // Move to LOW queue (queue_size = 24)
     ldr w23, [x22, #16]             // LOW queue count (queue_count = 16)
@@ -959,35 +954,31 @@ _try_steal_work:
     mov x19, x0  // scheduler_states pointer
     mov x20, x1  // current core ID
 
-    // BINARY SEARCH DEBUG: Skip all logic, just return NULL immediately
-    // This tests if the basic function call works
-    b steal_work_no_victim
-
     // Check if work stealing is enabled
-    // mov x21, #WORK_STEAL_ENABLED
-    // cbz x21, steal_work_disabled
+    mov x21, #WORK_STEAL_ENABLED
+    cbz x21, steal_work_disabled
 
     // Select victim using default strategy
-    // mov x0, x19  // scheduler_states pointer
-    // mov x1, x20  // current core ID
-    // bl _select_victim_by_load
-    // mov x21, x0  // victim_core
+    mov x0, x19  // scheduler_states pointer
+    mov x1, x20  // current core ID
+    bl _select_victim_by_load
+    mov x21, x0  // victim_core
 
     // Check if we found a valid victim
-    // cmp x21, x20
-    // b.eq steal_work_no_victim
+    cmp x21, x20
+    b.eq steal_work_no_victim
 
     // Check if steal is allowed
-    // mov x0, x19  // scheduler_states pointer
-    // mov x1, x20  // source_core
-    // mov x2, x21  // target_core
-    // bl _is_steal_allowed
-    // cbz x0, steal_work_not_allowed
+    mov x0, x19  // scheduler_states pointer
+    mov x1, x20  // source_core
+    mov x2, x21  // target_core
+    bl _is_steal_allowed
+    cbz x0, steal_work_not_allowed
 
     // Get victim's scheduler state
-    // mov x0, x21  // victim_core
-    // bl _get_scheduler_state
-    // mov x22, x0  // victim_state
+    mov x0, x21  // victim_core
+    bl _get_scheduler_state
+    mov x22, x0  // victim_state
     
     // Try to steal from highest priority queue first
     mov x23, #NUM_PRIORITIES
@@ -1231,3 +1222,201 @@ increment_steal_count_done:
     .extern pcb_migration_count
     .extern pcb_last_scheduled
     .extern scheduler_total_migrations
+
+// ------------------------------------------------------------
+// Get Scheduler State Helper Function
+// ------------------------------------------------------------
+// Get the scheduler state for a given core ID.
+//
+// Parameters:
+//   x0 (uint64_t) - core_id: Core ID to get state for
+//
+// Returns:
+//   x0 (void*) - scheduler_state: Pointer to scheduler state
+//
+// Complexity: O(1) - Constant time operation
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+_get_scheduler_state:
+    // Save callee-saved registers
+    stp x19, x20, [sp, #-16]!
+    stp x21, x30, [sp, #-16]!
+
+    // Validate core ID
+    cmp x0, #MAX_CORES
+    b.ge get_scheduler_state_invalid
+
+    // Save core ID
+    mov x19, x0  // core_id
+
+    // Get global scheduler_states pointer (passed from caller)
+    // In a real implementation, this would be a global variable
+    // For now, we'll use a simplified approach
+    mov x20, #0x10000000  // Dummy scheduler states base address
+    mov x21, #248         // scheduler_size = 248
+    mul x21, x19, x21     // core_id * scheduler_size
+    add x20, x20, x21     // scheduler_states + offset
+
+    // Return scheduler state address
+    mov x0, x20
+    ldp x21, x30, [sp], #16
+    ldp x19, x20, [sp], #16
+    ret
+
+get_scheduler_state_invalid:
+    mov x0, #0
+    ldp x21, x30, [sp], #16
+    ldp x19, x20, [sp], #16
+    ret
+
+// ------------------------------------------------------------
+// Get Priority Queue Helper Function
+// ------------------------------------------------------------
+// Get the priority queue for a given scheduler state, core, and priority.
+//
+// Parameters:
+//   x0 (void*) - scheduler_state: Scheduler state pointer
+//   x1 (uint64_t) - core_id: Core ID
+//   x2 (uint32_t) - priority: Priority level
+//
+// Returns:
+//   x0 (void*) - queue: Priority queue pointer
+//
+// Complexity: O(1) - Constant time operation
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+_get_priority_queue:
+    // Save callee-saved registers
+    stp x19, x20, [sp, #-16]!
+    stp x21, x30, [sp, #-16]!
+
+    // Validate parameters
+    cbz x0, get_priority_queue_invalid  // Check scheduler_state
+    cmp x1, #MAX_CORES
+    b.ge get_priority_queue_invalid    // Check core_id
+    cmp x2, #NUM_PRIORITIES
+    b.ge get_priority_queue_invalid    // Check priority
+
+    // Save parameters
+    mov x19, x0  // scheduler_state
+    mov x20, x1  // core_id
+    mov x21, x2  // priority
+
+    // Calculate queue address
+    // Queue offset = scheduler_queues + (priority * queue_size)
+    // scheduler_queues = 8, queue_size = 24
+    mov x0, #24         // queue_size
+    mul x0, x21, x0     // priority * queue_size
+    add x0, x0, #8      // + scheduler_queues offset
+    add x0, x19, x0     // scheduler_state + queue_offset
+
+    ldp x21, x30, [sp], #16
+    ldp x19, x20, [sp], #16
+    ret
+
+get_priority_queue_invalid:
+    mov x0, #0
+    ldp x21, x30, [sp], #16
+    ldp x19, x20, [sp], #16
+    ret
+
+// ------------------------------------------------------------
+// Scheduler Dequeue Process Helper Function
+// ------------------------------------------------------------
+// Dequeue a process from a priority queue.
+//
+// Parameters:
+//   x0 (void*) - scheduler_state: Scheduler state pointer
+//   x1 (uint64_t) - core_id: Core ID
+//   x2 (uint32_t) - priority: Priority level
+//
+// Returns:
+//   x0 (void*) - process: Dequeued process pointer, or NULL if empty
+//
+// Complexity: O(1) - Constant time operation
+//
+// Version: 0.10
+// Author: Lee Barney
+// Last Modified: 2025-01-19
+//
+_scheduler_dequeue_process:
+    // Save callee-saved registers
+    stp x19, x30, [sp, #-16]!
+    stp x20, x21, [sp, #-16]!
+    stp x22, x23, [sp, #-16]!
+
+    // Validate parameters
+    cbz x0, scheduler_dequeue_failed  // Check scheduler_state
+    cmp x1, #MAX_CORES
+    b.ge scheduler_dequeue_failed     // Check core_id
+    cmp x2, #NUM_PRIORITIES
+    b.ge scheduler_dequeue_failed     // Check priority
+
+    // Save parameters
+    mov x19, x0  // scheduler_state
+    mov x20, x1  // core_id
+    mov x21, x2  // priority
+
+    // Get priority queue address
+    mov x0, x19  // scheduler_state
+    mov x1, x20  // core_id
+    mov x2, x21  // priority
+    bl _get_priority_queue
+    mov x22, x0  // queue_address
+
+    cbz x22, scheduler_dequeue_failed  // Check if queue address is valid
+
+    // Check if queue is empty
+    ldr w23, [x22, #16]  // queue_count
+    cbz w23, scheduler_dequeue_empty  // count == 0 means empty
+
+    // Get head process
+    ldr x0, [x22, #0]    // queue_head
+    cbz x0, scheduler_dequeue_failed  // head is NULL
+
+    // Update queue head to next process
+    ldr x1, [x0, #0]     // Load next pointer from PCB (offset 0 = pcb_next)
+    str x1, [x22, #0]    // Update queue_head
+
+    // If this was the last process, update tail to NULL
+    cbz x1, scheduler_dequeue_clear_tail
+    b scheduler_dequeue_decrement_count
+
+scheduler_dequeue_clear_tail:
+    str xzr, [x22, #8]   // Clear queue_tail
+
+scheduler_dequeue_decrement_count:
+    // Decrement queue count
+    sub w23, w23, #1
+    str w23, [x22, #16]  // queue_count
+
+    // Clear next/prev pointers of dequeued process
+    str xzr, [x0, #0]    // Clear next pointer
+    str xzr, [x0, #8]    // Clear prev pointer
+
+    // Return process
+    mov x0, x0           // Return the dequeued process
+    ldp x22, x23, [sp], #16
+    ldp x20, x21, [sp], #16
+    ldp x19, x30, [sp], #16
+    ret
+
+scheduler_dequeue_empty:
+    mov x0, #0
+    ldp x22, x23, [sp], #16
+    ldp x20, x21, [sp], #16
+    ldp x19, x30, [sp], #16
+    ret
+
+scheduler_dequeue_failed:
+    mov x0, #0
+    ldp x22, x23, [sp], #16
+    ldp x20, x21, [sp], #16
+    ldp x19, x30, [sp], #16
+    ret

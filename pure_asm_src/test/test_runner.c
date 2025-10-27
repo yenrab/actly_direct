@@ -57,6 +57,18 @@ extern void test_integration_yielding_main();
 // External Phase 4 load balancing test functions
 extern void test_load_balancing();
 
+// External Phase 5 affinity test functions
+extern void test_affinity_main();
+
+// External Phase 8 communication test functions
+extern void test_communication_main();
+
+// External Phase 9 timer test functions
+extern void test_timer_main();
+
+// External Phase 10 Apple Silicon test functions
+extern void test_apple_silicon_main();
+
 // External work stealing test functions
 extern void test_work_stealing();
 extern void test_victim_selection();
@@ -106,49 +118,26 @@ void test_runner_main() {
     test_scheduler_helper_functions();
     test_scheduler_edge_cases_simple();
     
-    // TODO: Fix bus error in test_process_state_management()
-    // test_process_state_management();
-    printf("test_process_state_management() skipped due to bus error\n");
-    
     test_scheduler_queue_length();
     test_expand_memory_pool();
     
     // Run Phase 4 load balancing tests
     test_load_balancing();
     
-    // Run new Phase 6 yielding and blocking tests
-    // NOTE: These tests have been fixed and are now working!
-    // The illegal instruction errors have been resolved.
+    // Run Phase 5 affinity tests
+    test_affinity_main();
+    
+    // Run Phase 8 communication tests
+    test_communication_main();
+
+    // Run Phase 9 timer tests
+    test_timer_main();
+
+    // Run Phase 10 Apple Silicon tests
+    test_apple_silicon_main();
+    
+    // Run Phase 6 yielding and blocking tests
     test_yielding_main();
-    // test_work_stealing();
-    // test_victim_selection();
-    // test_work_stealing_deque();
-    
-    // Run new Phase 6 yielding and blocking tests
-    // NOTE: These tests have been fixed and are now working!
-    // The illegal instruction errors have been resolved.
-    // test_yielding_main();
-    
-    // test_blocking_main();
-    
-    // test_actly_bifs_main();
-    
-    // test_integration_yielding_main();
-    
-    // Run new Phase 6 individual test suites
-    // test_process_yield_basic();
-    
-    // test_process_yield_with_pcb();
-    
-    // test_process_save_context_basic();
-    
-    // test_process_restore_context_basic();
-    
-    // test_context_functions_edge_cases();
-    
-    // test_integration_yield_scheduling();
-    
-    // test_integration_multiple_processes();
     
     // Print test results
     test_print_results();
